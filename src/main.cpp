@@ -16,9 +16,8 @@
 // the next state for all of them. Parts are dealt by rank, so one device alone
 // plays a whole piece and two share it.
 //
-// Front button: play or stop, for everyone. Side button: next piece while
-// stopped, running on into the next collection (hold to skip a collection);
-// volume while playing.
+// Front button: play or stop, for everyone. Side button: next piece in the
+// collection while stopped (hold for the next collection), volume while playing.
 
 static ensemble::Clock clock_;
 static chamber::Roster roster;
@@ -290,7 +289,7 @@ void loop() {
   } else if (nextPiece || nextSet) {
     uint32_t ids[chamber::maxMembers];
     unsigned count = members(now, ids);
-    unsigned next = nextSet ? score::nextCollection(control.piece) : (control.piece + 1) % score::pieceCount;
+    unsigned next = nextSet ? score::nextCollection(control.piece) : score::nextInCollection(control.piece);
     session.propose(uint8_t(next), false, 0, ids, count);
     applyControl();
     send(now);

@@ -39,8 +39,8 @@ into `src/Pieces.h`, so the browser and the device play the same pieces.
 ## Controls
 
 - Front button: play or stop, for every device.
-- Side button: next piece while stopped, running on from one collection into
-  the next; hold it to skip to the next collection. Volume while playing.
+- Side button: next piece in the collection while stopped; hold it for the
+  next collection. Volume while playing.
 
 ## How it keeps time
 

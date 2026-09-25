@@ -132,7 +132,7 @@ inline void menu(M5Canvas& c, unsigned pieceIndex, unsigned devices, int rank, i
   c.setFont(&fonts::Font0);
   c.setTextColor(rgb(0x8a9082));
   const unsigned start = score::collectionStart(pieceIndex);
-  std::snprintf(text, sizeof text, "%u/%u  Hold B: skip set", pieceIndex % score::pieceCount - start + 1,
+  std::snprintf(text, sizeof text, "%u/%u  Hold B: next set", pieceIndex % score::pieceCount - start + 1,
                 score::collectionSize(pieceIndex));
   c.drawString(text, left, 208);
   c.setTextColor(rgb(ink));
