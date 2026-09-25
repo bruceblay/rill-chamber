@@ -206,7 +206,7 @@ inline void composed(M5Canvas& c, const score::Piece& piece, const score::Part& 
 // Playing: this device's first part in detail, and a flash for every note it
 // strikes across all its parts.
 inline void playing(M5Canvas& c, const score::Piece& piece, const player::View* views, unsigned count,
-                    bool leader, double pulses, int64_t jitterMicros) {
+                    bool leader, double pulses, int64_t jitterMicros, int volumePercent, bool capped) {
   c.fillScreen(rgb(background));
   const uint32_t glow = leader ? gold : green;
   float flash = 0;
@@ -287,6 +287,13 @@ inline void playing(M5Canvas& c, const score::Piece& piece, const player::View* 
   std::snprintf(bottom, sizeof bottom, "%d:%02d / %d:%02d", int(seconds) / 60, int(seconds) % 60,
                 int(length) / 60, int(length) % 60);
   c.drawString(bottom, 8, 214);
+  // The volume in force, red while a low battery is holding it down.
+  char level[12];
+  std::snprintf(level, sizeof level, "vol %d%%", volumePercent);
+  c.setTextColor(rgb(capped ? 0xce7067 : 0x8a9082), back);
+  c.setTextDatum(top_right);
+  c.drawString(level, 127, 214);
+  c.setTextDatum(top_left);
   c.fillRect(8 + int(119 * (1 - flash) / 2), 230, int(119 * flash), 2, rgb(glow));
 }
 

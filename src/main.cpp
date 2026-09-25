@@ -344,7 +344,9 @@ void loop() {
       unsigned count = engine.views(views);
       const score::Piece& piece = score::piece(control.piece);
       double pulses = double(sharedNow(now) - control.start) / double(piece.periodMicros);
-      screen::playing(canvas, piece, views, count, session.rank() == 0, pulses, clock_.offsetJitter());
+      const uint8_t heard = std::min(volume, volumeCap);
+      screen::playing(canvas, piece, views, count, session.rank() == 0, pulses, clock_.offsetJitter(),
+                      (heard * 100 + 127) / 255, volumeCap < volume);
     } else {
       uint32_t ids[chamber::maxMembers];
       unsigned count = members(now, ids);
