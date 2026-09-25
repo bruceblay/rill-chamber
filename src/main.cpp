@@ -42,9 +42,13 @@ static uint8_t capFor(int millivolts) {
 static void applyVolume() { M5.Speaker.setVolume(std::min(volume, volumeCap)); }
 
 // Received packets are copied out on the WiFi task and handled in the loop.
-static volatile bool pending = false;
-static chamber::Packet inbox{};
-static volatile int64_t inboxAt = 0;
+// A ring, not a single slot: with four devices a packet arrives every 80 ms
+// or so, and while the loop draws the screen (20-35 ms) a second one would
+// find the slot full and be dropped. One slot lost about a tenth of them.
+struct Received { chamber::Packet packet; int64_t at; };
+static constexpr unsigned inboxSize = 16;
+static Received inbox[inboxSize];
+static std::atomic<uint32_t> inboxHead{0}, inboxTail{0};  // written by WiFi task / loop
 static std::atomic<uint32_t> dropped{0};
 
 // The shared timeline as last read by the loop: shared microseconds at a local
@@ -74,10 +78,12 @@ static void part(int64_t& start, const char* name) {
 void onReceive(const uint8_t*, const uint8_t* data, int length) {
   int64_t at = esp_timer_get_time();
   if (length != int(sizeof(chamber::Packet))) return;
-  if (pending) { ++dropped; return; }
-  std::memcpy(const_cast<chamber::Packet*>(&inbox), data, sizeof(chamber::Packet));
-  inboxAt = at;
-  pending = true;
+  const uint32_t head = inboxHead.load(std::memory_order_relaxed);
+  if (head - inboxTail.load(std::memory_order_acquire) >= inboxSize) { ++dropped; return; }
+  Received& slot = inbox[head % inboxSize];
+  std::memcpy(&slot.packet, data, sizeof(chamber::Packet));
+  slot.at = at;
+  inboxHead.store(head + 1, std::memory_order_release);
 }
 
 static uint32_t deviceId() {
@@ -273,13 +279,12 @@ void loop() {
   if (lastLoop && now - lastLoop > worstLoopUs) worstLoopUs = uint32_t(now - lastLoop);
   lastLoop = now;
 
-  if (pending) {
-    chamber::Packet packet = const_cast<chamber::Packet&>(inbox);
-    int64_t at = inboxAt;
-    pending = false;
-    roster.heard(packet.sender, at);
-    clock_.receive(packet.clock, at);
-    if (session.receive(packet.control)) applyControl();
+  for (uint32_t tail = inboxTail.load(std::memory_order_relaxed); tail != inboxHead.load(std::memory_order_acquire);) {
+    const Received received = inbox[tail % inboxSize];
+    inboxTail.store(++tail, std::memory_order_release);
+    roster.heard(received.packet.sender, received.at);
+    clock_.receive(received.packet.clock, received.at);
+    if (session.receive(received.packet.control)) applyControl();
   }
   part(partStart, "receive");
   clock_.settle(now);
