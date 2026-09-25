@@ -16,8 +16,9 @@
 // the next state for all of them. Parts are dealt by rank, so one device alone
 // plays a whole piece and two share it.
 //
-// Front button: play or stop, for everyone. Side button: next piece in the
-// collection while stopped (hold for the next collection), volume while playing.
+// Front button: play or stop, for everyone. Side button: next piece while
+// stopped, running on into the next collection (hold to skip a collection);
+// volume while playing.
 
 static ensemble::Clock clock_;
 static chamber::Roster roster;
@@ -55,9 +56,20 @@ static int64_t timingLocal = 0, timingShared = 0;
 struct Plan { uint8_t piece; bool running; int64_t start; int rank; unsigned members; uint32_t seed; };
 static Plan plan{};
 static std::atomic<uint32_t> planGeneration{0};
-static std::atomic<uint32_t> worstRenderUs{0}, queueErrors{0}, worstGapUs{0};
+static std::atomic<uint32_t> worstRenderUs{0}, queueErrors{0}, worstGapUs{0}, paced{0};
 // The longest pass through the loop: a stall here freezes the radio and screen.
 static uint32_t worstLoopUs = 0;
+// Which part of the loop was slowest, so a stall can be pinned down: each part
+// is timed, and the worst one and how long it took are kept for the log.
+static const char* slowestPart = "-";
+static uint32_t slowestPartUs = 0;
+static int64_t partStart = 0;
+static void part(int64_t& start, const char* name) {
+  int64_t now = esp_timer_get_time();
+  uint32_t took = uint32_t(now - start);
+  if (took > slowestPartUs) { slowestPartUs = took; slowestPart = name; }
+  start = now;
+}
 
 void onReceive(const uint8_t*, const uint8_t* data, int length) {
   int64_t at = esp_timer_get_time();
@@ -147,6 +159,25 @@ void audioTask(void*) {
       vTaskDelay(1);
     }
     index = (index + 1) % 3;
+    // Pace by the clock as well as by the speaker. When the speaker is not
+    // running, playRaw returns at once instead of waiting for room, and this
+    // task, above the loop in priority on the same core, would render without
+    // pause and starve it: screen, radio and log all freeze. Never run more
+    // than a few blocks ahead of real time, whatever the speaker does.
+    {
+      static int64_t origin = 0;
+      static uint64_t blocks = 0;
+      constexpr int64_t blockMicros = 512 * 1000000LL / player::rate;
+      const int64_t now = esp_timer_get_time();
+      if (!origin) origin = now;
+      ++blocks;
+      int64_t ahead = origin + int64_t(blocks) * blockMicros - now;
+      if (ahead < -250000) { origin = now - int64_t(blocks) * blockMicros; ahead = 0; }  // fell behind: catch up
+      if (ahead > 80000) {
+        ++paced;
+        vTaskDelay(pdMS_TO_TICKS((ahead - 48000) / 1000));
+      }
+    }
   }
 }
 
@@ -209,7 +240,9 @@ void setup() {
 }
 
 void loop() {
+  partStart = esp_timer_get_time();
   M5.update();
+  part(partStart, "buttons");
   const int64_t now = esp_timer_get_time();
   static int64_t lastLoop = 0;
   if (lastLoop && now - lastLoop > worstLoopUs) worstLoopUs = uint32_t(now - lastLoop);
@@ -223,6 +256,7 @@ void loop() {
     clock_.receive(packet.clock, at);
     if (session.receive(packet.control)) applyControl();
   }
+  part(partStart, "receive");
   clock_.settle(now);
   clock_.checkTimeout(now);
   while (clock_.due(now)) {}
@@ -231,9 +265,11 @@ void loop() {
   timingShared = clock_.sharedMicros(now);
   portEXIT_CRITICAL(&timingLock);
 
+  part(partStart, "clock");
   // Everyone broadcasts, four times a second, so everyone knows who is here.
   static int64_t lastSend = 0;
   if (now - lastSend > 250000) { lastSend = now; send(now); }
+  part(partStart, "send");
 
   const chamber::Control& control = session.control();
   if (M5.BtnA.wasClicked()) {
@@ -254,12 +290,13 @@ void loop() {
   } else if (nextPiece || nextSet) {
     uint32_t ids[chamber::maxMembers];
     unsigned count = members(now, ids);
-    unsigned next = nextSet ? score::nextCollection(control.piece) : score::nextInCollection(control.piece);
+    unsigned next = nextSet ? score::nextCollection(control.piece) : (control.piece + 1) % score::pieceCount;
     session.propose(uint8_t(next), false, 0, ids, count);
     applyControl();
     send(now);
   }
 
+  part(partStart, "controls");
   // Battery, once a second. A reading sags under load, so the cap only lifts
   // again once the voltage has recovered well past the step.
   static int64_t lastBattery = 0;
@@ -273,6 +310,7 @@ void loop() {
     }
   }
 
+  part(partStart, "battery");
   static int64_t lastDraw = 0;
   if (now - lastDraw > 66000) {
     lastDraw = now;
@@ -292,6 +330,7 @@ void loop() {
     canvas.pushSprite(0, 0);
   }
 
+  part(partStart, "screen");
   static int64_t lastReport = 0;
   if (now - lastReport > 5000000) {
     lastReport = now;
@@ -299,7 +338,7 @@ void loop() {
     Serial.printf("%s devices=%u piece=%u running=%u rank=%d jitter=%lldus render=%luus queue=%lu dropped=%lu "
                   "notes=%lu steals=%lu ahead=%lu back=%lu worst=%.2f late=%lu voices=%u gap=%luus "
                   "joins=%lu takeovers=%lu heard=%lu missed=%lu level=%.3f heap=%u reset=%s up=%llds loop=%luus "
-                  "battery=%dmV%s volume=%u\n",
+                  "battery=%dmV%s volume=%u slowest=%s:%luus paced=%lu speaker=%d\n",
                   clock_.conducting() ? "lead" : "follow", members(now, ids), control.piece, control.running,
                   session.rank(), (long long)clock_.offsetJitter(), (unsigned long)worstRenderUs.load(),
                   (unsigned long)queueErrors.load(), (unsigned long)dropped.load(),
@@ -309,7 +348,8 @@ void loop() {
                   (unsigned long)clock_.takeovers(), (unsigned long)clock_.received(), (unsigned long)clock_.missed(),
                   engine.level(), ESP.getFreeHeap(), resetName(), (long long)(now / 1000000), (unsigned long)worstLoopUs,
                   int(M5.Power.getBatteryVoltage()), M5.Power.isCharging() == m5::Power_Class::is_charging ? "+" : "",
-                  unsigned(std::min(volume, volumeCap)));
+                  unsigned(std::min(volume, volumeCap)), slowestPart, (unsigned long)slowestPartUs,
+                  (unsigned long)paced.load(), int(M5.Speaker.isEnabled()));
   }
   delay(2);
 }
