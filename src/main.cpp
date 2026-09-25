@@ -5,6 +5,7 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <atomic>
+#include <esp_system.h>
 #include "Chamber.h"
 #include "Player.h"
 #include "Screen.h"
@@ -94,6 +95,7 @@ void audioTask(void*) {
   unsigned index = 0;
   uint32_t seen = 0;
   Plan current{};
+  bool sounding = false;
   for (;;) {
     uint32_t generation = planGeneration.load();
     if (generation != seen) {
@@ -101,11 +103,20 @@ void audioTask(void*) {
       portENTER_CRITICAL(&timingLock);
       current = plan;
       portEXIT_CRITICAL(&timingLock);
-      if (current.running) engine.configure(current.piece, current.rank, current.members, current.seed);
+      sounding = false;
+    }
+    // A start more than ten seconds away cannot be one a device proposed (they
+    // start two and a half seconds out): it belongs to a timeline that has
+    // since moved, so treat the piece as stopped rather than wait in silence.
+    const bool stale = current.running && current.start - sharedNow(esp_timer_get_time()) > 10000000;
+    const bool wanted = current.running && !stale;
+    if (wanted != sounding) {
+      if (wanted) engine.configure(current.piece, current.rank, current.members, current.seed);
       else engine.silence();
+      sounding = wanted;
     }
     double position = -1;
-    if (current.running) {
+    if (sounding) {
       const score::Piece& piece = score::piece(current.piece);
       position = double(sharedNow(esp_timer_get_time()) - current.start) / double(piece.periodMicros);
     }
@@ -135,6 +146,22 @@ static void send(int64_t now) {
 
 static unsigned members(int64_t now, uint32_t* out) { return roster.members(self, now, out); }
 
+// Why this device last started, so a restart mid-piece can be told apart:
+// a crash, a watchdog, or the battery dipping under a loud passage.
+static const char* resetName() {
+  switch (esp_reset_reason()) {
+    case ESP_RST_POWERON: return "power-on";
+    case ESP_RST_SW: return "software";
+    case ESP_RST_PANIC: return "crash";
+    case ESP_RST_INT_WDT: return "interrupt-watchdog";
+    case ESP_RST_TASK_WDT: return "task-watchdog";
+    case ESP_RST_WDT: return "watchdog";
+    case ESP_RST_BROWNOUT: return "brownout";
+    case ESP_RST_DEEPSLEEP: return "deep-sleep";
+    default: return "other";
+  }
+}
+
 void setup() {
   auto cfg = M5.config();
   cfg.internal_spk = true;
@@ -154,8 +181,9 @@ void setup() {
   M5.Speaker.begin();
   M5.Speaker.setVolume(volume);
   applyControl();
-  xTaskCreatePinnedToCore(audioTask, "chamber-audio", 6144, nullptr, 3, nullptr, 1);
-  Serial.printf("rill-chamber id=%08lx radio=%s pieces=%u\n", (unsigned long)self, radio ? "up" : "FAILED", score::pieceCount);
+  xTaskCreatePinnedToCore(audioTask, "chamber-audio", 12288, nullptr, 3, nullptr, 1);
+  Serial.printf("rill-chamber id=%08lx radio=%s pieces=%u reset=%s\n", (unsigned long)self, radio ? "up" : "FAILED",
+                score::pieceCount, resetName());
 }
 
 void loop() {
@@ -170,6 +198,7 @@ void loop() {
     clock_.receive(packet.clock, at);
     if (session.receive(packet.control)) applyControl();
   }
+  clock_.settle(now);
   clock_.checkTimeout(now);
   while (clock_.due(now)) {}
   portENTER_CRITICAL(&timingLock);
@@ -229,7 +258,7 @@ void loop() {
     uint32_t ids[chamber::maxMembers];
     Serial.printf("%s devices=%u piece=%u running=%u rank=%d jitter=%lldus render=%luus queue=%lu dropped=%lu "
                   "notes=%lu steals=%lu ahead=%lu back=%lu worst=%.2f late=%lu voices=%u gap=%luus "
-                  "joins=%lu takeovers=%lu heard=%lu missed=%lu level=%.3f heap=%u\n",
+                  "joins=%lu takeovers=%lu heard=%lu missed=%lu level=%.3f heap=%u reset=%s up=%llds\n",
                   clock_.conducting() ? "lead" : "follow", members(now, ids), control.piece, control.running,
                   session.rank(), (long long)clock_.offsetJitter(), (unsigned long)worstRenderUs.load(),
                   (unsigned long)queueErrors.load(), (unsigned long)dropped.load(),
@@ -237,7 +266,7 @@ void loop() {
                   (unsigned long)engine.snapsBack(), engine.worstError(), (unsigned long)engine.lateNotes(),
                   engine.peakVoices(), (unsigned long)worstGapUs.load(), (unsigned long)clock_.joins(),
                   (unsigned long)clock_.takeovers(), (unsigned long)clock_.received(), (unsigned long)clock_.missed(),
-                  engine.level(), ESP.getFreeHeap());
+                  engine.level(), ESP.getFreeHeap(), resetName(), (long long)(now / 1000000));
   }
   delay(2);
 }

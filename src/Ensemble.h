@@ -62,9 +62,19 @@ class Clock {
   // A device conducts until it hears from one with a lower id, which is the
   // whole of the election: stable, needs no negotiation, and settles in one
   // packet. Ties cannot happen, since the id is a MAC.
-  void begin(uint32_t id, int64_t now, uint32_t tempo) {
+  //
+  // A device first listens for `listen` microseconds before it will conduct.
+  // One that restarts in the middle of a piece would otherwise begin a fresh
+  // timeline and, holding the lowest id, drag everyone onto it, leaving the
+  // piece's start time on a timeline that no longer exists. Listening, it
+  // takes the timeline from whatever it hears -- a follower still carries the
+  // old conductor's -- and resumes as if it had never gone.
+  void begin(uint32_t id, int64_t now, uint32_t tempo, int64_t listen = 1500000) {
     self_ = id;
     conductor_ = id;
+    listening_ = listen > 0;
+    listenUntil_ = now + listen;
+    adopted_ = false;
     session_ = id ^ uint32_t(now);
     setTempo(tempo);
     beatIndex_ = 0;
@@ -83,7 +93,22 @@ class Clock {
     beatPeriod_ = 60000000u / tempo_;
   }
 
-  bool conducting() const { return conductor_ == self_; }
+  bool conducting() const { return !listening_ && conductor_ == self_; }
+  bool listening() const { return listening_; }
+
+  // Ends the listening period. A device that took a timeline from a higher id
+  // claims the clock on it, keeping the grid, so the others' shared time does
+  // not move; one that heard a lower id follows; one that heard nobody leads
+  // its own. Returns true if listening ended.
+  bool settle(int64_t now) {
+    if (!listening_ || now < listenUntil_) return false;
+    listening_ = false;
+    if (adopted_ && conductor_ > self_) {
+      conductor_ = self_;
+      session_ = self_ ^ uint32_t(now);
+    }
+    return true;
+  }
   uint32_t conductor() const { return conductor_; }
   uint32_t tempo() const { return tempo_; }
   uint32_t beatPeriod() const { return beatPeriod_; }
@@ -164,12 +189,19 @@ class Clock {
       tonic_ = p.tonic;
       mode_ = p.mode;
     }
-    if (p.role != 1) return;
-    // Lower id conducts. A device that was conducting steps down here, and
-    // one that was following ignores anything from a higher id than the
-    // conductor it already has.
-    if (p.conductor > conductor_) return;
-    bool changed = p.conductor != conductor_ || p.session != session_;
+    // While listening, the first packet from anyone gives the timeline, and
+    // after that only a conductor refines it: each sender has its own clock.
+    if (listening_) {
+      if (adopted_ && p.role != 1) return;
+    } else {
+      if (p.role != 1) return;
+      // Lower id conducts. A device that was conducting steps down here, and
+      // one that was following ignores anything from a higher id than the
+      // conductor it already has.
+      if (p.conductor > conductor_) return;
+    }
+    bool changed = !adopted_ || p.conductor != conductor_ || p.session != session_;
+    adopted_ = true;
     conductor_ = p.conductor;
     session_ = p.session;
     if (!changed) {
@@ -274,6 +306,7 @@ class Clock {
   uint32_t received_ = 0, missed_ = 0, joins_ = 0, takeovers_ = 0;
   uint32_t epoch_ = 0, harmonyFrom_ = 0;
   uint8_t tonic_ = 0, mode_ = 0;
-  bool haveOffset_ = false, pitched_ = false;
+  bool haveOffset_ = false, pitched_ = false, listening_ = false, adopted_ = false;
+  int64_t listenUntil_ = 0;
 };
 }

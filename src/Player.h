@@ -71,8 +71,10 @@ class Engine {
 
   // `target` is the score position, in pulses, at this block's first sample.
   void render(int16_t* out, unsigned count, double target) {
-    std::array<float, 1024> mix{};
+    // The mix lives in the engine, not on the audio task's small stack.
+    std::array<float, 1024>& mix = mix_;
     count = std::min<unsigned>(count, mix.size());
+    std::fill(mix.begin(), mix.begin() + count, 0.0f);
     if (piece_) advance(count, target);
     unsigned sounding = 0;
     for (auto& v : voices_) if (v.on) { play(v, mix.data(), count); ++sounding; }
@@ -257,6 +259,7 @@ class Engine {
   std::array<Note, 64> pendingNotes_{};
   unsigned pending_ = 0;
   std::array<Voice, 40> voices_{};
+  std::array<float, 1024> mix_{};
   std::array<float, maxParts> flash_{};
   float master_ = 3.0f, highpass_ = 0, lastInput_ = 0, envelope_ = 0;
   uint32_t rng_ = 0x9e3779b9, started_ = 0, steals_ = 0, snapsAhead_ = 0, snapsBack_ = 0, late_ = 0;

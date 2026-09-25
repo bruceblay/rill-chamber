@@ -1,8 +1,7 @@
 # Rill Chamber
 
 Process music for several StickS3s, one part each: the pieces from the
-[Rill Sound lab](https://rillsound.com/lab), after Steve Reich and Conlon
-Nancarrow, on real devices keeping time together over ESP-NOW.
+[Rill Sound lab](https://rillsound.com/lab), after Steve Reich, on real devices keeping time together over ESP-NOW.
 
 Every device runs this same firmware. Switch on two or more near each other and
 they find each other within a second: the lowest id keeps the clock, and every
@@ -11,7 +10,8 @@ piece for all of them.
 
 Parts are dealt out by rank, so any piece plays on any number of devices. One
 device alone plays every part, which is handy for trying a piece; two devices
-share a duo; two devices playing a four-part piece take two parts each.
+share a duo. When four-part pieces arrive, two devices will take two parts
+each.
 
 ## Pieces
 
@@ -19,7 +19,6 @@ share a duo; two devices playing a four-part piece take two parts each.
 | --- | --- | --- |
 | Piano Phase | 2 | Steve Reich, *Piano Phase* (1967) |
 | Clapping Music | 2 | Steve Reich, *Clapping Music* (1972) |
-| Tempo Canon | 4 | Conlon Nancarrow, *Study for Player Piano No. 37* |
 
 The figures and melodies are original to the lab; the processes are the
 composers'. The scores are not written here: `tools/export_scores.mjs` reads

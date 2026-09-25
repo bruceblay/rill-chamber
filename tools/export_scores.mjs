@@ -17,7 +17,7 @@ const sound=resolve(process.argv[2]??resolve(root,'../rill-sound'));
 const {PIECES,stageAt,phaseSlope,buildOrder,audibleSteps}=await import(pathToFileURL(resolve(sound,'src/lab/phase-scores.js')));
 
 // The pieces this firmware carries, in menu order, and the sounds it has.
-const SLUGS=['piano-phase','clapping','tempo-canon'];
+const SLUGS=['piano-phase','clapping'];
 const SAMPLES=['/samples/hand-clap-1.wav','/samples/hand-clap-2.wav'];
 const VOICES={piano:'Voice::Piano',sample:'Voice::Sample'};
 const MODES={play:'Mode::Play',rest:'Mode::Rest',build:'Mode::Build',reduce:'Mode::Reduce'};

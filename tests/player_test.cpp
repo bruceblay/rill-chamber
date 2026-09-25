@@ -47,7 +47,6 @@ int main() {
   run(0, 0, 0, 1, 2, 30);  // Piano Phase alone: both parts
   run(0, 1, 1, 2, 1, 30);  // Piano Phase, second of two devices
   run(1, 2, 0, 1, 2, 20);  // Clapping Music alone
-  run(2, 4, 0, 1, 4, 70);  // Tempo Canon alone: all four voices
   if (failures) { std::printf("%d failures\n", failures); return 1; }
   std::printf("player: notes on time, audible, unclipped\n");
   return 0;

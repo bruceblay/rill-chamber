@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Bruce Blay
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <cstdio>
+#include <algorithm>
 #include <cstdlib>
 #include "Chamber.h"
 
@@ -71,10 +72,13 @@ int main() {
     // Line them up, then run both well into the performance.
     int64_t t = 0;
     for (; t < 10000000; t += 1000) {
+      lead.settle(t);
+      follow.settle(t);
       while (lead.due(t)) {}
       if (t % 250000 == 0) follow.receive(lead.outgoing(t), t);
       while (follow.due(t)) {}
     }
+    CHECK(lead.conducting() && !follow.conducting());
     // The lead ticks past a beat and sends; the follower receives just before
     // its own tick for the same beat.
     int64_t beat = lead.nextBeat();
@@ -85,6 +89,37 @@ int main() {
     int64_t after = follow.sharedMicros(beat + 20);
     CHECK(std::llabs(after - before) < period / 10);
     CHECK(std::llabs(follow.sharedMicros(beat + 20) - lead.sharedMicros(beat + 20)) < period / 10);
+  }
+
+  // The leader restarts mid-piece. It must come back on the timeline everyone
+  // is already on, or the piece's start time points at a timeline that no
+  // longer exists and every device falls silent.
+  {
+    ensemble::Clock lead, follow;
+    lead.begin(1, 0, 240);
+    follow.begin(2, 0, 240);
+    int64_t worstJump = 0, previous = 0;
+    bool restarted = false;
+    for (int64_t t = 0; t < 20000000; t += 1000) {
+      if (t == 8000000) { lead = ensemble::Clock(); lead.begin(1, t, 240); restarted = true; }
+      lead.settle(t);
+      follow.settle(t);
+      follow.checkTimeout(t);
+      lead.checkTimeout(t);
+      while (lead.due(t)) {}
+      while (follow.due(t)) {}
+      // Everyone broadcasts four times a second, as the firmware does.
+      if (t % 250000 == 0) follow.receive(lead.outgoing(t), t);
+      if (t % 250000 == 125000) lead.receive(follow.outgoing(t), t);
+      int64_t shared = follow.sharedMicros(t);
+      if (t > 3000000) worstJump = std::max(worstJump, std::llabs(shared - previous - 1000));
+      previous = shared;
+    }
+    CHECK(restarted && lead.conducting() && !follow.conducting());
+    CHECK(worstJump < 20000);  // the follower's time never jumps
+    CHECK(std::llabs(lead.sharedMicros(20000000) - follow.sharedMicros(20000000)) < 5000);
+    std::printf("restart: follower's worst jump %lld us, clocks %lld us apart\n", (long long)worstJump,
+                (long long)std::llabs(lead.sharedMicros(20000000) - follow.sharedMicros(20000000)));
   }
 
   if (failures) { std::printf("%d failures\n", failures); return 1; }
