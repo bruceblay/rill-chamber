@@ -5,6 +5,7 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <atomic>
+#include <cstdarg>
 #include <esp_system.h>
 #include "Chamber.h"
 #include "Player.h"
@@ -190,6 +191,29 @@ static void send(int64_t now) {
 
 static unsigned members(int64_t now, uint32_t* out) { return roster.members(self, now, out); }
 
+// The serial log, kept off the loop. Plugged into a computer with nothing
+// reading the port, a write blocks -- setTxTimeoutMs(0) notwithstanding -- and
+// the loop that drives the screen and radio froze for as long as the port went
+// unread: 18 s, then 168 s, each ending the moment a reader opened the port.
+// Lines now go to a queue, and a task of their own on the other core writes
+// them out; if the port blocks, only that task waits, and lines that do not
+// fit are dropped.
+struct LogLine { char text[640]; };
+static QueueHandle_t logQueue = nullptr;
+static void logTask(void*) {
+  static LogLine line;
+  for (;;) if (xQueueReceive(logQueue, &line, portMAX_DELAY) == pdTRUE) Serial.print(line.text);
+}
+static void logf(const char* format, ...) {
+  if (!logQueue) return;
+  static LogLine line;  // only the loop logs
+  va_list args;
+  va_start(args, format);
+  vsnprintf(line.text, sizeof line.text, format, args);
+  va_end(args);
+  xQueueSend(logQueue, &line, 0);
+}
+
 // Why this device last started, so a restart mid-piece can be told apart:
 // a crash, a watchdog, or the battery dipping under a loud passage.
 static const char* resetName() {
@@ -218,6 +242,8 @@ void setup() {
   // screen. Running on battery, that was the whole difference. Never wait:
   // what cannot be sent is dropped.
   Serial.setTxTimeoutMs(0);
+  logQueue = xQueueCreate(4, sizeof(LogLine));
+  xTaskCreatePinnedToCore(logTask, "chamber-log", 3072, nullptr, 1, nullptr, 0);
   M5.BtnB.setHoldThresh(600);
   M5.Display.setRotation(0);
   M5.Display.setBrightness(110);
@@ -234,7 +260,7 @@ void setup() {
   applyVolume();
   applyControl();
   xTaskCreatePinnedToCore(audioTask, "chamber-audio", 12288, nullptr, 3, nullptr, 1);
-  Serial.printf("rill-chamber id=%08lx radio=%s pieces=%u reset=%s\n", (unsigned long)self, radio ? "up" : "FAILED",
+  logf("rill-chamber id=%08lx radio=%s pieces=%u reset=%s\n", (unsigned long)self, radio ? "up" : "FAILED",
                 score::pieceCount, resetName());
 }
 
@@ -334,7 +360,7 @@ void loop() {
   if (now - lastReport > 5000000) {
     lastReport = now;
     uint32_t ids[chamber::maxMembers];
-    Serial.printf("%s devices=%u piece=%u running=%u rank=%d jitter=%lldus render=%luus queue=%lu dropped=%lu "
+    logf("%s devices=%u piece=%u running=%u rank=%d jitter=%lldus render=%luus queue=%lu dropped=%lu "
                   "notes=%lu steals=%lu ahead=%lu back=%lu worst=%.2f late=%lu voices=%u gap=%luus "
                   "joins=%lu takeovers=%lu heard=%lu missed=%lu level=%.3f heap=%u reset=%s up=%llds loop=%luus "
                   "battery=%dmV%s volume=%u slowest=%s:%luus paced=%lu speaker=%d\n",
