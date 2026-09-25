@@ -44,6 +44,8 @@ struct Plan { uint8_t piece; bool running; int64_t start; int rank; unsigned mem
 static Plan plan{};
 static std::atomic<uint32_t> planGeneration{0};
 static std::atomic<uint32_t> worstRenderUs{0}, queueErrors{0}, worstGapUs{0};
+// The longest pass through the loop: a stall here freezes the radio and screen.
+static uint32_t worstLoopUs = 0;
 
 void onReceive(const uint8_t*, const uint8_t* data, int length) {
   int64_t at = esp_timer_get_time();
@@ -169,6 +171,11 @@ void setup() {
   cfg.internal_imu = false;
   M5.begin(cfg);
   Serial.begin(115200);
+  // With no computer attached nothing reads the USB serial port, and a write
+  // would wait for its timeout, stalling the loop that runs the radio and the
+  // screen. Running on battery, that was the whole difference. Never wait:
+  // what cannot be sent is dropped.
+  Serial.setTxTimeoutMs(0);
   M5.BtnB.setHoldThresh(600);
   M5.Display.setRotation(0);
   M5.Display.setBrightness(110);
@@ -190,6 +197,9 @@ void setup() {
 void loop() {
   M5.update();
   const int64_t now = esp_timer_get_time();
+  static int64_t lastLoop = 0;
+  if (lastLoop && now - lastLoop > worstLoopUs) worstLoopUs = uint32_t(now - lastLoop);
+  lastLoop = now;
 
   if (pending) {
     chamber::Packet packet = const_cast<chamber::Packet&>(inbox);
@@ -261,7 +271,7 @@ void loop() {
     uint32_t ids[chamber::maxMembers];
     Serial.printf("%s devices=%u piece=%u running=%u rank=%d jitter=%lldus render=%luus queue=%lu dropped=%lu "
                   "notes=%lu steals=%lu ahead=%lu back=%lu worst=%.2f late=%lu voices=%u gap=%luus "
-                  "joins=%lu takeovers=%lu heard=%lu missed=%lu level=%.3f heap=%u reset=%s up=%llds\n",
+                  "joins=%lu takeovers=%lu heard=%lu missed=%lu level=%.3f heap=%u reset=%s up=%llds loop=%luus\n",
                   clock_.conducting() ? "lead" : "follow", members(now, ids), control.piece, control.running,
                   session.rank(), (long long)clock_.offsetJitter(), (unsigned long)worstRenderUs.load(),
                   (unsigned long)queueErrors.load(), (unsigned long)dropped.load(),
@@ -269,7 +279,7 @@ void loop() {
                   (unsigned long)engine.snapsBack(), engine.worstError(), (unsigned long)engine.lateNotes(),
                   engine.peakVoices(), (unsigned long)worstGapUs.load(), (unsigned long)clock_.joins(),
                   (unsigned long)clock_.takeovers(), (unsigned long)clock_.received(), (unsigned long)clock_.missed(),
-                  engine.level(), ESP.getFreeHeap(), resetName(), (long long)(now / 1000000));
+                  engine.level(), ESP.getFreeHeap(), resetName(), (long long)(now / 1000000), (unsigned long)worstLoopUs);
   }
   delay(2);
 }
