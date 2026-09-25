@@ -76,7 +76,7 @@ inline int wrapped(M5Canvas& c, const char* text, int x, int y, int width) {
 
 // Stopped: the piece, who is here, and what to press. Everything hangs off one
 // left margin, as the playing screen does.
-inline void menu(M5Canvas& c, unsigned pieceIndex, unsigned devices, int rank, bool conducting) {
+inline void menu(M5Canvas& c, unsigned pieceIndex, unsigned devices, int rank, bool conducting, bool lowBattery) {
   const score::Piece& piece = score::piece(pieceIndex);
   constexpr int left = 10, width = 115;
   c.fillScreen(rgb(background));
@@ -128,7 +128,12 @@ inline void menu(M5Canvas& c, unsigned pieceIndex, unsigned devices, int rank, b
   c.setFont(&fonts::Font0);
   c.setTextColor(rgb(0x8a9082));
   (void)conducting;
-  c.drawString("Hold B: next collection", left, 208);
+  if (lowBattery) {
+    c.setTextColor(rgb(0xce7067));
+    c.drawString("Low battery: volume capped", left, 208);
+  } else {
+    c.drawString("Hold B: next collection", left, 208);
+  }
   c.setTextColor(rgb(ink));
   c.drawString("A  play", left, 224);
   c.setTextDatum(top_right);

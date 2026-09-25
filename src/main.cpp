@@ -27,6 +27,18 @@ static M5Canvas canvas(&M5.Display);
 static uint32_t self = 0;
 static uint8_t broadcast[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 static uint8_t volume = 255;  // as loud as the speaker goes; the side button steps it down
+// A nearly flat battery cannot supply the speaker's peaks at full volume: the
+// voltage collapses and the device resets mid-piece. Below these voltages the
+// volume is capped, quieter as the battery runs down, whatever was chosen.
+static uint8_t volumeCap = 255;
+static int batteryMillivolts = 0;
+static uint8_t capFor(int millivolts) {
+  if (millivolts <= 0) return 255;       // no reading: assume a healthy supply
+  if (millivolts < 3450) return 140;
+  if (millivolts < 3650) return 190;
+  return 255;
+}
+static void applyVolume() { M5.Speaker.setVolume(std::min(volume, volumeCap)); }
 
 // Received packets are copied out on the WiFi task and handled in the loop.
 static volatile bool pending = false;
@@ -187,7 +199,9 @@ void setup() {
   bool radio = startRadio();
   clock_.begin(self, esp_timer_get_time(), 240);
   M5.Speaker.begin();
-  M5.Speaker.setVolume(volume);
+  batteryMillivolts = M5.Power.getBatteryVoltage();
+  volumeCap = capFor(batteryMillivolts);
+  applyVolume();
   applyControl();
   xTaskCreatePinnedToCore(audioTask, "chamber-audio", 12288, nullptr, 3, nullptr, 1);
   Serial.printf("rill-chamber id=%08lx radio=%s pieces=%u reset=%s\n", (unsigned long)self, radio ? "up" : "FAILED",
@@ -235,7 +249,7 @@ void loop() {
   if ((nextPiece || nextSet) && control.running) {
     if (nextPiece) {
       volume = volume == 255 ? 170 : volume == 170 ? 110 : 255;
-      M5.Speaker.setVolume(volume);
+      applyVolume();
     }
   } else if (nextPiece || nextSet) {
     uint32_t ids[chamber::maxMembers];
@@ -244,6 +258,19 @@ void loop() {
     session.propose(uint8_t(next), false, 0, ids, count);
     applyControl();
     send(now);
+  }
+
+  // Battery, once a second. A reading sags under load, so the cap only lifts
+  // again once the voltage has recovered well past the step.
+  static int64_t lastBattery = 0;
+  if (now - lastBattery > 1000000) {
+    lastBattery = now;
+    batteryMillivolts = M5.Power.getBatteryVoltage();
+    uint8_t cap = capFor(batteryMillivolts);
+    if (cap < volumeCap || (cap > volumeCap && capFor(batteryMillivolts - 80) == cap)) {
+      volumeCap = cap;
+      applyVolume();
+    }
   }
 
   static int64_t lastDraw = 0;
@@ -260,7 +287,7 @@ void loop() {
       unsigned count = members(now, ids);
       int rank = 0;
       for (unsigned i = 0; i < count; ++i) if (ids[i] == self) rank = int(i);
-      screen::menu(canvas, control.piece, count, rank, clock_.conducting());
+      screen::menu(canvas, control.piece, count, rank, clock_.conducting(), volumeCap < 255);
     }
     canvas.pushSprite(0, 0);
   }
@@ -271,7 +298,8 @@ void loop() {
     uint32_t ids[chamber::maxMembers];
     Serial.printf("%s devices=%u piece=%u running=%u rank=%d jitter=%lldus render=%luus queue=%lu dropped=%lu "
                   "notes=%lu steals=%lu ahead=%lu back=%lu worst=%.2f late=%lu voices=%u gap=%luus "
-                  "joins=%lu takeovers=%lu heard=%lu missed=%lu level=%.3f heap=%u reset=%s up=%llds loop=%luus\n",
+                  "joins=%lu takeovers=%lu heard=%lu missed=%lu level=%.3f heap=%u reset=%s up=%llds loop=%luus "
+                  "battery=%dmV%s volume=%u\n",
                   clock_.conducting() ? "lead" : "follow", members(now, ids), control.piece, control.running,
                   session.rank(), (long long)clock_.offsetJitter(), (unsigned long)worstRenderUs.load(),
                   (unsigned long)queueErrors.load(), (unsigned long)dropped.load(),
@@ -279,7 +307,9 @@ void loop() {
                   (unsigned long)engine.snapsBack(), engine.worstError(), (unsigned long)engine.lateNotes(),
                   engine.peakVoices(), (unsigned long)worstGapUs.load(), (unsigned long)clock_.joins(),
                   (unsigned long)clock_.takeovers(), (unsigned long)clock_.received(), (unsigned long)clock_.missed(),
-                  engine.level(), ESP.getFreeHeap(), resetName(), (long long)(now / 1000000), (unsigned long)worstLoopUs);
+                  engine.level(), ESP.getFreeHeap(), resetName(), (long long)(now / 1000000), (unsigned long)worstLoopUs,
+                  int(M5.Power.getBatteryVoltage()), M5.Power.isCharging() == m5::Power_Class::is_charging ? "+" : "",
+                  unsigned(std::min(volume, volumeCap)));
   }
   delay(2);
 }
