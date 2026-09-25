@@ -16,8 +16,8 @@
 // the next state for all of them. Parts are dealt by rank, so one device alone
 // plays a whole piece and two share it.
 //
-// Front button: play or stop, for everyone. Side button: next piece while
-// stopped, volume while playing.
+// Front button: play or stop, for everyone. Side button: next piece in the
+// collection while stopped (hold for the next collection), volume while playing.
 
 static ensemble::Clock clock_;
 static chamber::Roster roster;
@@ -169,6 +169,7 @@ void setup() {
   cfg.internal_imu = false;
   M5.begin(cfg);
   Serial.begin(115200);
+  M5.BtnB.setHoldThresh(600);
   M5.Display.setRotation(0);
   M5.Display.setBrightness(110);
   canvas.setColorDepth(16);
@@ -220,17 +221,19 @@ void loop() {
     applyControl();
     send(now);
   }
-  if (M5.BtnB.wasClicked()) {
-    if (control.running) {
+  const bool nextPiece = M5.BtnB.wasClicked(), nextSet = M5.BtnB.wasHold();
+  if ((nextPiece || nextSet) && control.running) {
+    if (nextPiece) {
       volume = volume == 255 ? 170 : volume == 170 ? 110 : 255;
       M5.Speaker.setVolume(volume);
-    } else {
-      uint32_t ids[chamber::maxMembers];
-      unsigned count = members(now, ids);
-      session.propose(uint8_t((control.piece + 1) % score::pieceCount), false, 0, ids, count);
-      applyControl();
-      send(now);
     }
+  } else if (nextPiece || nextSet) {
+    uint32_t ids[chamber::maxMembers];
+    unsigned count = members(now, ids);
+    unsigned next = nextSet ? score::nextCollection(control.piece) : score::nextInCollection(control.piece);
+    session.propose(uint8_t(next), false, 0, ids, count);
+    applyControl();
+    send(now);
   }
 
   static int64_t lastDraw = 0;

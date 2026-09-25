@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 #include "Score.h"
 #include "score_vectors.h"
@@ -40,6 +41,16 @@ int main() {
   check(score::plays(0, 0, 2) && score::plays(1, 1, 2) && !score::plays(1, 0, 2), "duo deal", 0, 0);
   check(score::plays(0, 0, 1) && score::plays(1, 0, 1), "solo deal", 0, 0);
   check(score::plays(3, 1, 2) && score::plays(2, 0, 2), "four parts on two", 0, 0);
+  // Collections: next piece wraps within a collection, next collection moves on.
+  {
+    unsigned first = 0, inventions = score::nextCollection(first);
+    check(!std::strcmp(score::piece(inventions).collection, "Inventions"), "inventions follow Reich", 0, 0);
+    check(score::collectionSize(inventions) == 15, "fifteen inventions", 0, 0);
+    unsigned last = inventions + 14;
+    check(score::nextInCollection(last) == inventions, "wraps within the collection", 0, 0);
+    unsigned final = score::pieceCount - 1;
+    check(score::nextCollection(final) == 0, "last collection wraps to the first", 0, 0);
+  }
   if (failures) { std::printf("%d failures\n", failures); return 1; }
   std::printf("score: all parts match the lab\n");
   return 0;

@@ -82,11 +82,14 @@ inline void menu(M5Canvas& c, unsigned pieceIndex, unsigned devices, int rank, b
   c.fillScreen(rgb(background));
   c.setTextDatum(top_left);
 
+  // The collection and where this piece sits in it.
   c.setFont(&fonts::Font2);
   c.setTextColor(rgb(gold));
-  c.drawString("RILL CHAMBER", left, 10);
   char text[48];
-  std::snprintf(text, sizeof text, "%u/%u", pieceIndex % score::pieceCount + 1, score::pieceCount);
+  upper(text, piece.collection, sizeof text);
+  c.drawString(text, left, 10);
+  const unsigned start = score::collectionStart(pieceIndex);
+  std::snprintf(text, sizeof text, "%u/%u", pieceIndex % score::pieceCount - start + 1, score::collectionSize(pieceIndex));
   c.setTextColor(rgb(0x8a9082));
   c.setTextDatum(top_right);
   c.drawString(text, left + width, 10);
@@ -124,7 +127,8 @@ inline void menu(M5Canvas& c, unsigned pieceIndex, unsigned devices, int rank, b
   c.drawFastHLine(left, 200, width, rgb(dim));
   c.setFont(&fonts::Font0);
   c.setTextColor(rgb(0x8a9082));
-  c.drawString(conducting ? "Keeping the clock" : "Following the clock", left, 208);
+  (void)conducting;
+  c.drawString("Hold B: next collection", left, 208);
   c.setTextColor(rgb(ink));
   c.drawString("A  play", left, 224);
   c.setTextDatum(top_right);

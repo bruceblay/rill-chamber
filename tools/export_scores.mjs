@@ -15,13 +15,17 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const sound=resolve(process.argv[2]??resolve(root,'../rill-sound'));
 const {PIECES,stageAt,phaseSlope,buildOrder,audibleSteps}=await import(pathToFileURL(resolve(sound,'src/lab/phase-scores.js')));
-const {BACH}=await import(pathToFileURL(resolve(sound,'src/lab/bach-scores.js')));
+import {readFileSync} from 'node:fs';
+// The lab's Bach scores: a catalogue and one file per piece, in public/bach.
+const bach=slug=>JSON.parse(readFileSync(resolve(sound,'public/bach',`${slug}.json`),'utf8'));
+const CATALOG=JSON.parse(readFileSync(resolve(sound,'public/bach/catalog.json'),'utf8'));
 
 // The pieces this firmware carries, in menu order, and the sounds it has.
 // Process pieces come from phase-scores.js; composed ones from bach-scores.js,
 // played on a harpsichord synthesized as the lab's is.
 const SLUGS=['piano-phase','clapping'];
-const COMPOSED=['invention-1','goldberg-canon','canon-augmentation','contrapunctus-1'];
+// Every Bach piece in the lab's catalogue, in its order and collections.
+const COMPOSED=CATALOG.map(entry=>entry.slug);
 const SAMPLES=['/samples/hand-clap-1.wav','/samples/hand-clap-2.wav'];
 const VOICES={piano:'Voice::Piano',sample:'Voice::Sample'};
 const MODES={play:'Mode::Play',rest:'Mode::Rest',build:'Mode::Build',reduce:'Mode::Reduce'};
@@ -57,11 +61,11 @@ for(const slug of SLUGS){
   if(part.sample&&sample<0)throw new Error(`${slug}: sample ${part.sample} is not embedded`);
   parts.push(`{${text(part.name)},${VOICES[part.voice]},${sample},${part.transpose??0},${float(part.level??1.3)},${float(part.rate??1)},${text(part.main)},${stageStart},${part.stages.length},0,0}`);
  }
- pieces.push(`{${text(piece.title)},${text(piece.composer)},${text(`after ${piece.composer}`)},0,${Math.round(piece.period*1e6)},${piece.cycle??piece.pattern.length},${piece.featured??-1},${partStart},${piece.devices.length},${sectionStart},${(piece.sections??[]).length}}`);
+ pieces.push(`{${text(piece.title)},${text(piece.composer)},${text(`after ${piece.composer}`)},"Steve Reich",0.0f,${Math.round(piece.period*1e6)},${piece.cycle??piece.pattern.length},${piece.featured??-1},${partStart},${piece.devices.length},${sectionStart},${(piece.sections??[]).length}}`);
 }
 
 for(const slug of COMPOSED){
- const score=BACH[slug];
+ const score=bach(slug);
  const partStart=parts.length;
  for(const voice of score.voices){
   parts.push(`{${text(voice.name)},Voice::Harpsichord,-1,0,1.3,1.0,"",0,0,${noteEvents.length},${voice.notes.length}}`);
@@ -71,7 +75,7 @@ for(const slug of COMPOSED){
  // A composed piece's pulse is one beat, so its cycle is a single pulse.
  // The lab's shorter name where the full one will not fit the small screen.
  const title={'canon-augmentation':'Canon by Augmentation'}[slug]??score.title;
- pieces.push(`{${text(title)},"Johann Sebastian Bach",${text(`Johann Sebastian Bach, ${score.catalogue}`)},${beatsPerBar},${Math.round(60e6/score.bpm)},1,-1,${partStart},${score.voices.length},0,0}`);
+ pieces.push(`{${text(title)},"Johann Sebastian Bach",${text(`Johann Sebastian Bach, ${score.catalogue}`)},${text(score.collection)},${float(beatsPerBar)}f,${Math.round(60e6/score.bpm)},1,-1,${partStart},${score.voices.length},0,0}`);
 }
 
 const list=(items,per=1)=>items.map((item,i)=>(i%per?'':'\n  ')+item).join(',');
@@ -141,7 +145,7 @@ for(const slug of SLUGS){
  }
 }
 for(const slug of COMPOSED){
- for(const voice of BACH[slug].voices){
+ for(const voice of bach(slug).voices){
   spans.push(`{${vectors.length},${voice.notes.length}}`);
   for(const [start,,midi] of voice.notes)vectors.push(`{${Math.fround(start).toFixed(6)},${midi}}`);
  }

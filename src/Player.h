@@ -18,7 +18,8 @@
 namespace player {
 
 constexpr uint32_t rate = 32000;
-constexpr unsigned maxParts = 4;
+// Enough for the six-voice ricercar on a single device.
+constexpr unsigned maxParts = 6;
 
 // What the display needs about one part, copied out of the audio task.
 struct View {

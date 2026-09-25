@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <memory>
 #include "Player.h"
 #include "score_vectors.h"
@@ -12,15 +14,27 @@
 static int failures = 0;
 #define CHECK(condition) do { if (!(condition)) { ++failures; std::printf("FAIL line %d: %s\n", __LINE__, #condition); } } while (0)
 
-static unsigned expected(unsigned firstPart, unsigned parts, double before) {
+// The score's notes before `before` for the parts this device is dealt.
+static unsigned expected(const score::Piece& piece, int rank, unsigned members, double before) {
   unsigned total = 0;
-  for (unsigned p = firstPart; p < firstPart + parts; ++p)
-    for (unsigned n = 0; n < spans[p].count; ++n)
-      if (hits[spans[p].start + n].time < before) ++total;
+  for (unsigned i = 0; i < piece.partCount; ++i) {
+    if (!score::plays(i, unsigned(rank), members)) continue;
+    const Span& span = spans[piece.part + i];
+    for (unsigned n = 0; n < span.count; ++n)
+      if (hits[span.start + n].time < before) ++total;
+  }
   return total;
 }
 
-static void run(unsigned pieceIndex, unsigned firstPart, int rank, unsigned members, unsigned parts, double seconds) {
+static unsigned find(const char* title) {
+  for (unsigned i = 0; i < score::pieceCount; ++i)
+    if (!std::strcmp(score::piece(i).title, title)) return i;
+  std::printf("no piece %s\n", title);
+  std::exit(1);
+}
+
+static void run(const char* title, int rank, unsigned members, double seconds) {
+  const unsigned pieceIndex = find(title);
   auto engine = std::make_unique<player::Engine>();
   engine->configure(pieceIndex, rank, members, 7);
   const score::Piece& piece = score::piece(pieceIndex);
@@ -35,23 +49,25 @@ static void run(unsigned pieceIndex, unsigned firstPart, int rank, unsigned memb
     position += 512 / periodSamples;
     for (int16_t sample : block) { peak = std::max(peak, std::abs(int(sample))); energy += double(sample) * sample; }
   }
-  unsigned want = expected(firstPart, parts, position);
-  std::printf("%-15s rank %d of %u: %u notes (score has %u), peak %d, rms %.0f\n", piece.title, rank, members,
+  unsigned want = expected(piece, rank, members, position);
+  std::printf("%-22s rank %d of %u: %u notes (score has %u), peak %d, rms %.0f\n", piece.title, rank, members,
               unsigned(engine->notesStarted()), want, peak, std::sqrt(energy / (blocks * 512.0)));
   // A note due right at the end of the last block can land either side of it.
-  CHECK(std::abs(int(engine->notesStarted()) - int(want)) <= int(parts));
+  CHECK(std::abs(int(engine->notesStarted()) - int(want)) <= int(piece.partCount));
   CHECK(peak < 32767 && peak > 3000);
 }
 
 int main() {
-  run(0, 0, 0, 1, 2, 30);  // Piano Phase alone: both parts
-  run(0, 1, 1, 2, 1, 30);  // Piano Phase, second of two devices
-  run(1, 2, 0, 1, 2, 20);  // Clapping Music alone
-  run(2, 4, 0, 2, 1, 40);  // Invention No. 1, upper voice on the first of two devices
-  run(2, 4, 0, 1, 2, 40);  // Invention No. 1 alone: both voices
-  run(3, 6, 0, 1, 3, 40);  // Goldberg Variation 3 alone
-  run(4, 9, 0, 1, 3, 40);  // Canon by augmentation alone, ornaments and all
-  run(5, 12, 0, 1, 4, 40); // Contrapunctus I alone: all four voices
+  run("Piano Phase", 0, 1, 30);           // alone: both parts
+  run("Piano Phase", 1, 2, 30);           // second of two devices
+  run("Clapping Music", 0, 1, 20);
+  run("Invention No. 1", 0, 2, 40);       // upper voice on the first of two
+  run("Invention No. 1", 0, 1, 40);       // both voices on one device
+  run("Sinfonia No. 9", 1, 2, 40);        // a three-voice piece on two devices
+  run("Goldberg Variation 3", 0, 1, 40);
+  run("Canon by Augmentation", 0, 1, 40); // ornaments and all
+  run("Contrapunctus I", 0, 1, 40);       // all four voices on one device
+  run("Ricercar a 6", 0, 1, 40);          // all six voices on one device
   if (failures) { std::printf("%d failures\n", failures); return 1; }
   std::printf("player: notes on time, audible, unclipped\n");
   return 0;

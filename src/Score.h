@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include "Pieces.h"
 
 // The lab's score engine, ported line for line from rill-sound's
@@ -15,6 +16,28 @@ namespace score {
 
 inline const Piece& piece(unsigned index) { return pieces[index % pieceCount]; }
 inline const Part& part(const Piece& p, unsigned index) { return parts[p.part + index]; }
+
+// Pieces are browsed a collection at a time; collections are contiguous in the
+// table. Next within this collection (wrapping), and the first of the next.
+inline bool sameCollection(unsigned a, unsigned b) { return !std::strcmp(piece(a).collection, piece(b).collection); }
+inline unsigned collectionStart(unsigned index) {
+  index %= pieceCount;
+  while (index > 0 && sameCollection(index - 1, index)) --index;
+  return index;
+}
+inline unsigned collectionSize(unsigned index) {
+  unsigned start = collectionStart(index), end = start;
+  while (end < pieceCount && sameCollection(start, end)) ++end;
+  return end - start;
+}
+inline unsigned nextInCollection(unsigned index) {
+  unsigned start = collectionStart(index);
+  return start + (index % pieceCount - start + 1) % collectionSize(index);
+}
+inline unsigned nextCollection(unsigned index) {
+  unsigned start = collectionStart(index);
+  return (start + collectionSize(index)) % pieceCount;
+}
 
 // Where a part is at `position`, measured in cycles of the score. Rests keep
 // the offset of whatever came before, so nothing jumps while silent. A stage

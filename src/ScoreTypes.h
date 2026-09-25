@@ -71,7 +71,8 @@ struct Piece {
   const char* title;
   const char* composer;
   const char* byline;  // "after Steve Reich", or the composer and catalogue number
-  uint8_t beatsPerBar; // for showing bars in composed pieces
+  const char* collection;  // pieces are browsed a collection at a time
+  float beatsPerBar;   // quarter-note beats in a bar (3/8 is 1.5), for showing bars
   uint32_t periodMicros;
   uint16_t cycle;
   int8_t featured;

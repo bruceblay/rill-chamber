@@ -16,28 +16,31 @@ each.
 
 ## Pieces
 
-| Piece | Parts | After |
+Browsed a collection at a time.
+
+| Collection | Pieces | Voices |
 | --- | --- | --- |
-| Piano Phase | 2 | Steve Reich, *Piano Phase* (1967) |
-| Clapping Music | 2 | Steve Reich, *Clapping Music* (1972) |
-| Invention No. 1 | 2 | Johann Sebastian Bach, BWV 772 |
-| Goldberg Variation 3 | 3 | Johann Sebastian Bach, BWV 988 |
-| Canon by Augmentation | 3 | Johann Sebastian Bach, BWV 1079 |
-| Contrapunctus I | 4 | Johann Sebastian Bach, BWV 1080 |
+| Steve Reich | Piano Phase, Clapping Music (after Reich) | 2 |
+| Inventions | Bach's fifteen Two-Part Inventions, BWV 772–786 | 2 |
+| Sinfonias | Bach's fifteen Three-Part Sinfonias, BWV 787–801 | 3 |
+| The Art of Fugue | Contrapunctus I–X, BWV 1080 | 3–4 |
+| Canons | Goldberg Variation 3; the canon by augmentation, BWV 1079 | 3 |
+| The Musical Offering | Ricercar a 6, BWV 1079 | 6 |
+| Chorales | BWV 269 and 347 | 4 |
 
 For the Reich pieces the figures are original to the lab and the processes
 are his. The Bach pieces are Bach's own notes, from the public-domain and
 CC BY-SA editions listed in `rill-sound/reference/bach/SOURCES.md`, played
 on a harpsichord synthesized as the lab's is, each note held for its written
 length. The scores are not written here: `tools/export_scores.mjs` reads
-them from the lab (`rill-sound/src/lab/phase-scores.js` and `bach-scores.js`)
-into `src/Pieces.h`,
-so the browser and the device play the same pieces.
+them from the lab (`rill-sound/src/lab/phase-scores.js` and `public/bach`)
+into `src/Pieces.h`, so the browser and the device play the same pieces.
 
 ## Controls
 
 - Front button: play or stop, for every device.
-- Side button: next piece while stopped; volume while playing.
+- Side button: next piece in the collection while stopped; hold it for the
+  next collection. Volume while playing.
 
 ## How it keeps time
 
