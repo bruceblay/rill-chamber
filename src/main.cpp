@@ -287,7 +287,7 @@ void loop() {
       unsigned count = members(now, ids);
       int rank = 0;
       for (unsigned i = 0; i < count; ++i) if (ids[i] == self) rank = int(i);
-      screen::menu(canvas, control.piece, count, rank, clock_.conducting(), volumeCap < 255);
+      screen::menu(canvas, control.piece, count, rank, M5.Power.getBatteryLevel(), volumeCap < 255);
     }
     canvas.pushSprite(0, 0);
   }

@@ -61,7 +61,8 @@ for(const slug of SLUGS){
   if(part.sample&&sample<0)throw new Error(`${slug}: sample ${part.sample} is not embedded`);
   parts.push(`{${text(part.name)},${VOICES[part.voice]},${sample},${part.transpose??0},${float(part.level??1.3)},${float(part.rate??1)},${text(part.main)},${stageStart},${part.stages.length},0,0}`);
  }
- pieces.push(`{${text(piece.title)},${text(piece.composer)},${text(`after ${piece.composer}`)},"Steve Reich",0.0f,${Math.round(piece.period*1e6)},${piece.cycle??piece.pattern.length},${piece.featured??-1},${partStart},${piece.devices.length},${sectionStart},${(piece.sections??[]).length}}`);
+ // The collection names the composer, so these need no line of their own.
+ pieces.push(`{${text(piece.title)},${text(piece.composer)},"","After Reich",0.0f,${Math.round(piece.period*1e6)},${piece.cycle??piece.pattern.length},${piece.featured??-1},${partStart},${piece.devices.length},${sectionStart},${(piece.sections??[]).length}}`);
 }
 
 for(const slug of COMPOSED){
@@ -75,7 +76,7 @@ for(const slug of COMPOSED){
  // A composed piece's pulse is one beat, so its cycle is a single pulse.
  // The lab's shorter name where the full one will not fit the small screen.
  const title={'canon-augmentation':'Canon by Augmentation'}[slug]??score.title;
- pieces.push(`{${text(title)},"Johann Sebastian Bach",${text(`Johann Sebastian Bach, ${score.catalogue}`)},${text(score.collection)},${float(beatsPerBar)}f,${Math.round(60e6/score.bpm)},1,-1,${partStart},${score.voices.length},0,0}`);
+ pieces.push(`{${text(title)},"Johann Sebastian Bach",${text(`Bach, ${score.catalogue}`)},${text(score.collection)},${float(beatsPerBar)}f,${Math.round(60e6/score.bpm)},1,-1,${partStart},${score.voices.length},0,0}`);
 }
 
 const list=(items,per=1)=>items.map((item,i)=>(i%per?'':'\n  ')+item).join(',');

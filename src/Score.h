@@ -17,6 +17,24 @@ namespace score {
 inline const Piece& piece(unsigned index) { return pieces[index % pieceCount]; }
 inline const Part& part(const Piece& p, unsigned index) { return parts[p.part + index]; }
 
+// A piece's length in pulses: its longest part, whether a list of notes or a
+// run of stages.
+inline double piecePulses(const Piece& p) {
+  double longest = 0;
+  for (unsigned i = 0; i < p.partCount; ++i) {
+    const Part& pt = part(p, i);
+    if (pt.noteCount) {
+      for (uint32_t n = 0; n < pt.noteCount; ++n)
+        longest = std::max(longest, double(noteEvents[pt.note + n].start + noteEvents[pt.note + n].length));
+    } else {
+      double cycles = 0;
+      for (unsigned s = 0; s < pt.stageCount; ++s) cycles += stages[pt.stage + s].cycles;
+      longest = std::max(longest, cycles * p.cycle);
+    }
+  }
+  return longest;
+}
+
 // Pieces are browsed a collection at a time; collections are contiguous in the
 // table. Next within this collection (wrapping), and the first of the next.
 inline bool sameCollection(unsigned a, unsigned b) { return !std::strcmp(piece(a).collection, piece(b).collection); }

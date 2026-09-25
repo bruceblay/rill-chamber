@@ -76,64 +76,65 @@ inline int wrapped(M5Canvas& c, const char* text, int x, int y, int width) {
 
 // Stopped: the piece, who is here, and what to press. Everything hangs off one
 // left margin, as the playing screen does.
-inline void menu(M5Canvas& c, unsigned pieceIndex, unsigned devices, int rank, bool conducting, bool lowBattery) {
+// Stopped: the piece, who is here, and what to press, each said once. The
+// header carries the collection and the battery; under the title only what
+// the header does not already say.
+inline void menu(M5Canvas& c, unsigned pieceIndex, unsigned devices, int rank, int battery, bool lowBattery) {
   const score::Piece& piece = score::piece(pieceIndex);
   constexpr int left = 10, width = 115;
   c.fillScreen(rgb(background));
   c.setTextDatum(top_left);
+  char text[48];
 
-  // The collection and where this piece sits in it.
   c.setFont(&fonts::Font2);
   c.setTextColor(rgb(gold));
-  char text[48];
   upper(text, piece.collection, sizeof text);
   c.drawString(text, left, 10);
-  const unsigned start = score::collectionStart(pieceIndex);
-  std::snprintf(text, sizeof text, "%u/%u", pieceIndex % score::pieceCount - start + 1, score::collectionSize(pieceIndex));
-  c.setTextColor(rgb(0x8a9082));
-  c.setTextDatum(top_right);
-  c.drawString(text, left + width, 10);
-  c.setTextDatum(top_left);
+  if (battery >= 0) {
+    std::snprintf(text, sizeof text, lowBattery ? "LOW %d%%" : "%d%%", std::min(battery, 100));
+    c.setTextColor(rgb(lowBattery ? 0xce7067 : 0x8a9082));
+    c.setTextDatum(top_right);
+    c.drawString(text, left + width, 10);
+    c.setTextDatum(top_left);
+  }
   c.drawFastHLine(left, 32, width, rgb(dim));
 
   c.setFont(&fonts::FreeSansBold12pt7b);
   c.setTextColor(rgb(ink));
   int y = wrapped(c, piece.title, left, 44, width);
-  c.setFont(&fonts::Font2);
-  c.setTextColor(rgb(0x9aa092));
-  std::snprintf(text, sizeof text, "%s", piece.byline);
-  y = wrapped(c, text, left, y + 2, width);
+  if (*piece.byline) {
+    c.setFont(&fonts::Font2);
+    c.setTextColor(rgb(0x9aa092));
+    y = wrapped(c, piece.byline, left, y + 2, width);
+  }
 
   // Who plays what, now: parts are dealt by rank among the devices present.
   y = std::max(y + 14, 118);
+  c.setFont(&fonts::Font2);
   c.setTextColor(rgb(green));
-  std::snprintf(text, sizeof text, "%u part%s", piece.partCount, piece.partCount == 1 ? "" : "s");
+  std::snprintf(text, sizeof text, "%u part%s, %u device%s", piece.partCount, piece.partCount == 1 ? "" : "s",
+                devices, devices == 1 ? "" : "s");
   c.drawString(text, left, y);
-  std::snprintf(text, sizeof text, "%u device%s", devices, devices == 1 ? "" : "s");
-  c.drawString(text, left, y + 18);
   if (rank >= 0 && devices) {
-    char names[48] = "";
+    char names[48] = "You: ";
     unsigned count = 0;
     for (unsigned i = 0; i < piece.partCount; ++i)
       if (score::plays(i, unsigned(rank), devices)) {
         size_t used = std::strlen(names);
-        if (count++ < 2) std::snprintf(names + used, sizeof names - used, "%s%s", used ? ", " : "", score::part(piece, i).name);
+        if (count++ < 2) std::snprintf(names + used, sizeof names - used, "%s%s", count > 1 ? ", " : "", score::part(piece, i).name);
       }
     if (count > 2) std::snprintf(names + std::strlen(names), sizeof names - std::strlen(names), " +%u", count - 2);
     c.setTextColor(rgb(ink));
-    wrapped(c, names, left, y + 40, width);
+    wrapped(c, names, left, y + 20, width);
   }
 
   c.drawFastHLine(left, 200, width, rgb(dim));
   c.setFont(&fonts::Font0);
   c.setTextColor(rgb(0x8a9082));
-  (void)conducting;
-  if (lowBattery) {
-    c.setTextColor(rgb(0xce7067));
-    c.drawString("Low battery: volume capped", left, 208);
-  } else {
-    c.drawString("Hold B: next collection", left, 208);
-  }
+  const unsigned start = score::collectionStart(pieceIndex);
+  std::snprintf(text, sizeof text, "%u/%u  Hold B: next set", pieceIndex % score::pieceCount - start + 1,
+                score::collectionSize(pieceIndex));
+  c.drawString(text, left, 208);
   c.setTextColor(rgb(ink));
   c.drawString("A  play", left, 224);
   c.setTextDatum(top_right);
@@ -221,11 +222,12 @@ inline void playing(M5Canvas& c, const score::Piece& piece, const player::View* 
   const player::View& view = views[0];
   const score::Part& part = score::part(piece, view.part);
   if (part.noteCount) {
-    composed(c, piece, part, view, glow, back, leader ? "LEAD " : "", pulses);
+    composed(c, piece, part, view, glow, back, "", pulses);
   } else {
   const score::Stage* stage = view.active ? &score::stages[part.stage + view.stage] : nullptr;
   char status[32] = "", main[16] = "";
-  const char* lead = leader ? "LEAD " : "";
+  // The leader is marked by its gold, not by a word.
+  const char* lead = "";
   if (view.done) { std::snprintf(status, sizeof status, "%sDONE", lead); std::snprintf(main, sizeof main, "OK"); }
   else if (!stage || pulses < 0) { std::snprintf(status, sizeof status, "%sREADY", lead); std::snprintf(main, sizeof main, "%d", int(std::ceil(-pulses * piece.periodMicros / 1e6))); }
   else {
@@ -277,9 +279,13 @@ inline void playing(M5Canvas& c, const score::Piece& piece, const player::View* 
   }
   c.setFont(&fonts::Font0);
   c.setTextColor(rgb(0x8a9082), back);
+  // Time through the piece and its length, as a player would want to know.
+  (void)jitterMicros;
+  const double seconds = std::max(0.0, pulses) * piece.periodMicros / 1e6;
+  const double length = score::piecePulses(piece) * piece.periodMicros / 1e6;
   char bottom[32];
-  if (leader) std::snprintf(bottom, sizeof bottom, "pulse %lld", (long long)std::max(0.0, std::floor(pulses)));
-  else std::snprintf(bottom, sizeof bottom, "sync %.1f ms", jitterMicros / 1000.0);
+  std::snprintf(bottom, sizeof bottom, "%d:%02d / %d:%02d", int(seconds) / 60, int(seconds) % 60,
+                int(length) / 60, int(length) % 60);
   c.drawString(bottom, 8, 214);
   c.fillRect(8 + int(119 * (1 - flash) / 2), 230, int(119 * flash), 2, rgb(glow));
 }

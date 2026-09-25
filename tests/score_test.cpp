@@ -44,7 +44,7 @@ int main() {
   // Collections: next piece wraps within a collection, next collection moves on.
   {
     unsigned first = 0, inventions = score::nextCollection(first);
-    check(!std::strcmp(score::piece(inventions).collection, "Inventions"), "inventions follow Reich", 0, 0);
+    check(!std::strcmp(score::piece(inventions).collection, "Inventions"), "inventions follow the Reich pieces", 0, 0);
     check(score::collectionSize(inventions) == 15, "fifteen inventions", 0, 0);
     unsigned last = inventions + 14;
     check(score::nextInCollection(last) == inventions, "wraps within the collection", 0, 0);
