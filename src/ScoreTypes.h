@@ -8,7 +8,9 @@
 namespace score {
 
 enum class Mode : uint8_t { Play, Rest, Build, Reduce };
-enum class Voice : uint8_t { Piano, Sample, Harpsichord };
+// Harpsichord, Marimba, Xylophone and Glass are struck: decaying partials.
+// Strings and Organ are held: a steady tone shaped over the note's length.
+enum class Voice : uint8_t { Piano, Sample, Harpsichord, Marimba, Xylophone, Glass, Strings, Organ };
 
 // A figure: `length` steps starting at notes[notes], MIDI numbers or -1 for a
 // rest, and the order its notes are added in during a build.
@@ -20,7 +22,8 @@ struct Pattern {
 // `from`/`to` are an offset in steps moved between over the stage; `rate` plays
 // at a multiple of the pulse. `restart` starts the figure from its first note,
 // `once` plays it through once, `slips` is a chance per note of skipping or
-// repeating one and staying lost.
+// repeating one and staying lost. `hold` is how long a held voice's note lasts,
+// in pulses; zero for struck voices, which ring.
 struct Stage {
   double cycles;
   Mode mode;
@@ -34,6 +37,7 @@ struct Stage {
   const char* label;
   const char* main;
   const char* word;
+  double hold;
 };
 
 // A note of a composed piece, in beats from the start: Bach's voices are lists

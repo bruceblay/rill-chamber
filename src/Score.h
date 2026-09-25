@@ -114,7 +114,7 @@ inline int64_t jsRound(double x) { return int64_t(std::floor(x + 0.5)); }
 
 // One part being played. `pulse` runs the lab's loop for one pulse and hands
 // every note due within it to `emit(time, midi, length)`, time in pulses and
-// length in pulses (zero for the process pieces, whose notes ring freely).
+// length in pulses (zero for struck process parts, whose notes ring freely).
 // A composed part plays its notes list instead, as the lab's Bach engine does:
 // each note that starts within the pulse, at its place in the pulse.
 class PartPlayer {
@@ -168,7 +168,7 @@ class PartPlayer {
       ++next_;
       if (due < double(local) - 0.25 || note < 0 || !audible(pattern, where, unsigned(step))) continue;
       step_ = stage.once ? position : step;
-      emit(std::max(double(local), due), note, 0.0);
+      emit(std::max(double(local), due), note, stage.hold);
     }
     return true;
   }

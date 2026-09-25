@@ -116,20 +116,35 @@ class Engine {
  private:
   static constexpr unsigned releaseSamples = rate / 7;
   static constexpr unsigned pianoHold = rate * 9 / 10;
-  // The lab's harpsichord: partials at these multiples of the note, each with
-  // its level and the seconds it takes to die away. Strong upper partials
-  // that fade quickly are what make it read as plucked.
-  static constexpr unsigned partialCount = 7;
-  static constexpr float partials[partialCount][3] = {
-    {1, 1, 1.1f}, {2, 0.75f, 0.7f}, {3, 0.5f, 0.45f}, {4, 0.35f, 0.3f},
-    {5, 0.22f, 0.2f}, {6, 0.14f, 0.14f}, {8, 0.08f, 0.08f}};
+  // The lab's struck voices (voices.js): partials at these multiples of the
+  // note, each with its level and the seconds it takes to die away. Strong
+  // upper partials that fade quickly are what make the harpsichord read as
+  // plucked. Rows end at the first zero ratio.
+  static constexpr unsigned partialCount = 10;
+  static constexpr float struck[4][7][3] = {
+    {{1, 1, 1.1f}, {2, 0.75f, 0.7f}, {3, 0.5f, 0.45f}, {4, 0.35f, 0.3f},
+     {5, 0.22f, 0.2f}, {6, 0.14f, 0.14f}, {8, 0.08f, 0.08f}},       // harpsichord
+    {{1, 1, 0.9f}, {3.93f, 0.35f, 0.18f}, {9.2f, 0.08f, 0.06f}},    // marimba
+    {{1, 1, 0.35f}, {3, 0.4f, 0.12f}, {6.1f, 0.15f, 0.05f}},        // xylophone
+    {{1, 1, 1.6f}, {2.76f, 0.3f, 0.6f}, {5.4f, 0.1f, 0.2f}}};       // glass
+  // The lab's held voices are an oscillator through a low-pass filter with a
+  // little vibrato. Here the oscillator is built from its harmonics, each
+  // weighted by the filter's response: a sawtooth for strings, a square
+  // (odd harmonics only) for the organ.
+  struct Held { bool odd; float cutoff, vibrato, depth, level; };
+  static constexpr Held strings{false, 1800, 5.8f, 0.003f, 1.25f};
+  static constexpr Held organ{true, 2400, 6, 0, 0.6f};
   static constexpr unsigned sineSize = 1024;
   struct Voice {
     const int16_t* data = nullptr;
     // Synthesized voices sum decaying partials instead of reading a sample.
-    bool synth = false;
+    // A held one keeps its partials steady and shapes the note as a whole:
+    // in quickly, out over its last sixth, with vibrato at `vibrato` cycles
+    // per sample.
+    bool synth = false, held = false;
     unsigned partialsUsed = 0;
     std::array<float, partialCount> amplitude{}, fade{}, phase{}, increment{};
+    float vibrato = 0, depth = 0, lfo = 0;
     uint32_t length = 0, delay = 0, hold = 0, releaseLeft = 0;
     double position = 0, step = 1;
     float gain = 0;
@@ -201,21 +216,50 @@ class Engine {
     // A composed note stops at its written length, as a finger lifts from the
     // key; the process pieces' notes ring out.
     const uint32_t written = note.length > 0 ? uint32_t(std::max(0.08 * rate, note.length * periodSamples_)) : 0;
-    if (part.voice == score::Voice::Harpsichord) {
-      const double hz = 440.0 * std::pow(2.0, (note.note + part.transpose - 69) / 12.0);
-      v->synth = true;
-      for (unsigned p = 0; p < partialCount; ++p) {
-        const double f = hz * partials[p][0];
+    const double hz = 440.0 * std::pow(2.0, (note.note + part.transpose - 69) / 12.0);
+    if (part.voice == score::Voice::Strings || part.voice == score::Voice::Organ) {
+      const Held& voice = part.voice == score::Voice::Strings ? strings : organ;
+      v->synth = v->held = true;
+      // Sawtooth or square, as a sum of sines scaled to the waveform's own level.
+      const float scale = voice.odd ? 4 / 3.14159265f : 2 / 3.14159265f;
+      unsigned harmonic = 1;
+      for (unsigned p = 0; p < partialCount; ++p, harmonic += voice.odd ? 2 : 1) {
+        const double f = hz * harmonic;
         if (f > rate * 0.4) break;
-        v->amplitude[p] = partials[p][1];
-        // Decays to 5% over the partial's time, as setTargetAtTime does.
-        v->fade[p] = float(std::exp(-3.0 / (partials[p][2] * rate)));
+        const double ratio = f / voice.cutoff;
+        v->amplitude[p] = scale / float(harmonic) / float(std::sqrt(1 + ratio * ratio * ratio * ratio));
+        v->fade[p] = 1;
         v->increment[p] = float(f * sineSize / rate);
         v->phase[p] = 0;
         v->partialsUsed = p + 1;
       }
-      v->length = rate * 3;
-      v->hold = written ? written : rate * 2;
+      v->vibrato = voice.vibrato * sineSize / rate;
+      v->depth = voice.depth;
+      v->length = std::max<uint32_t>(written, 64);
+      v->hold = v->length;
+      // The lab's struck voices sound at 0.3 of the velocity and held ones at
+      // its level; the harpsichord below is 0.22 of the velocity here. A
+      // further 0.6 because a steady tone fills the limiter's headroom that a
+      // decaying one leaves free, and read nearly twice as loud as the Bach.
+      v->gain = share * float(0.55 + 0.1 * spread) * voice.level * (0.22f / 0.3f) * 0.6f;
+    } else if (part.voice != score::Voice::Piano && part.voice != score::Voice::Sample) {
+      const auto& table = struck[int(part.voice) - int(score::Voice::Harpsichord)];
+      v->synth = true;
+      float longest = 0;
+      for (unsigned p = 0; p < 7 && table[p][0] > 0; ++p) {
+        const double f = hz * table[p][0];
+        if (f > rate * 0.4) break;
+        v->amplitude[p] = table[p][1];
+        // Decays to 5% over the partial's time, as setTargetAtTime does.
+        v->fade[p] = float(std::exp(-3.0 / (table[p][2] * rate)));
+        v->increment[p] = float(f * sineSize / rate);
+        v->phase[p] = 0;
+        v->partialsUsed = p + 1;
+        longest = std::max(longest, table[p][2]);
+      }
+      // A composed note stops at its written length; a mallet rings out.
+      v->length = part.voice == score::Voice::Harpsichord ? rate * 3 : uint32_t(longest * 2 * rate);
+      v->hold = written ? written : (part.voice == score::Voice::Harpsichord ? rate * 2 : v->length);
       v->gain = share * float(0.6 + 0.08 * spread) * 0.22f;
     } else if (part.voice == score::Voice::Sample) {
       const samples::Clip& clip = samples::oneShots[part.sample];
@@ -242,12 +286,18 @@ class Engine {
 
   float synthesize(Voice& v) {
     float sum = 0;
+    float bend = 1;
+    if (v.depth > 0) {
+      bend = 1 + v.depth * sine_[unsigned(v.lfo)];
+      v.lfo += v.vibrato;
+      if (v.lfo >= float(sineSize)) v.lfo -= float(sineSize);
+    }
     for (unsigned p = 0; p < v.partialsUsed; ++p) {
       unsigned index = unsigned(v.phase[p]);
       float frac = v.phase[p] - float(index);
       sum += v.amplitude[p] * (sine_[index] + (sine_[index + 1] - sine_[index]) * frac);
       v.amplitude[p] *= v.fade[p];
-      v.phase[p] += v.increment[p];
+      v.phase[p] += v.increment[p] * bend;
       if (v.phase[p] >= float(sineSize)) v.phase[p] -= float(sineSize);
     }
     return sum;
@@ -260,6 +310,11 @@ class Engine {
       if (v.synth) {
         if (v.position >= v.length) { v.on = false; return; }
         sample = synthesize(v);
+        if (v.held) {
+          // The lab's 'held' shape: up in the first eighth, down over the last sixth.
+          const float x = float(v.position) / float(v.length);
+          sample *= std::min({1.0f, x * 8, (1 - x) * 6});
+        }
         v.position += 1;
       } else {
         uint32_t index = uint32_t(v.position);

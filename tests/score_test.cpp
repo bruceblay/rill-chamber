@@ -28,6 +28,11 @@ int main() {
       player.reset(1);
       for (int64_t local = 0; player.pulse(piece, score::part(piece, i), local, [&](double time, int note, double) { out.push_back({time, note}); }); ++local) {}
       const Span& span = spans[partIndex];
+      if (span.count == RANDOM) {
+        check(!out.empty(), "random part plays", partIndex, 0);
+        std::printf("%-15s %-8s %5zu notes (random)\n", piece.title, score::part(piece, i).name, out.size());
+        continue;
+      }
       check(out.size() == span.count, "note count", partIndex, unsigned(out.size()));
       for (unsigned n = 0; n < std::min<size_t>(out.size(), span.count); ++n) {
         const Hit& hit = hits[span.start + n];
@@ -44,7 +49,8 @@ int main() {
   // Collections: next piece wraps within a collection, next collection moves on.
   {
     unsigned first = 0, inventions = score::nextCollection(first);
-    check(!std::strcmp(score::piece(inventions).collection, "Inventions"), "inventions follow the Reich pieces", 0, 0);
+    check(!std::strcmp(score::piece(inventions).collection, "Inventions"), "inventions follow the process pieces", 0, 0);
+    check(score::collectionSize(first) == 5, "five process pieces", 0, 0);
     check(score::collectionSize(inventions) == 15, "fifteen inventions", 0, 0);
     unsigned last = inventions + 14;
     check(score::nextInCollection(last) == inventions, "wraps within the collection", 0, 0);

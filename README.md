@@ -1,18 +1,19 @@
 # Rill Chamber
 
 Process music for several StickS3s, one part each: the pieces from the
-[Rill Sound lab](https://rillsound.com/lab), after Steve Reich and by
-Johann Sebastian Bach, on real devices keeping time together over ESP-NOW.
+[Rill Sound lab](https://rillsound.com/lab) for up to four devices, after
+Reich, Glass and Rzewski and by Johann Sebastian Bach, on real devices keeping
+time together over ESP-NOW.
 
 Every device runs this same firmware. Switch on two or more near each other and
 they find each other within a second: the lowest id keeps the clock, and every
 device knows who else is present. A press on any device starts or stops the
 piece for all of them.
 
-Parts are dealt out by rank, so any piece plays on any number of devices. One
-device alone plays every part, which is handy for trying a piece; two devices
-share a duo. When four-part pieces arrive, two devices will take two parts
-each.
+Parts are dealt out by rank, so any piece plays on one to four devices. One
+device alone plays every part, which is handy for trying a piece; with four,
+each device takes one part of a four-part piece. With fewer devices than
+parts, each takes several.
 
 ## Pieces
 
@@ -20,7 +21,7 @@ Browsed a collection at a time.
 
 | Collection | Pieces | Voices |
 | --- | --- | --- |
-| Steve Reich | Piano Phase, Clapping Music (after Reich) | 2 |
+| Process | Piano Phase, Clapping Music, Violin Phase (after Reich); Music in Fifths (after Glass); Les Moutons de Panurge (after Rzewski) | 2–4 |
 | Inventions | Bach's fifteen Two-Part Inventions, BWV 772–786 | 2 |
 | Sinfonias | Bach's fifteen Three-Part Sinfonias, BWV 787–801 | 3 |
 | The Art of Fugue | Contrapunctus I–X, BWV 1080 | 3–4 |
@@ -28,8 +29,8 @@ Browsed a collection at a time.
 | The Musical Offering | Ricercar a 6, BWV 1079 | 6 |
 | Chorales | BWV 269 and 347 | 4 |
 
-For the Reich pieces the figures are original to the lab and the processes
-are his. The Bach pieces are Bach's own notes, from the public-domain and
+For the process pieces the figures are original to the lab and the processes
+are the composers'. The Bach pieces are Bach's own notes, from the public-domain and
 CC BY-SA editions listed in `rill-sound/reference/bach/SOURCES.md`, played
 on a harpsichord synthesized as the lab's is, each note held for its written
 length. The scores are not written here: `tools/export_scores.mjs` reads
@@ -57,7 +58,9 @@ exact time rather than stepping it.
 
 ## Sounds
 
-Piano: Rill Mallet's multisamples (VCSL, CC0). Claps: two single hand claps
+Piano: Rill Mallet's multisamples (VCSL, CC0). Harpsichord, marimba,
+xylophone and glass are synthesized from decaying partials, and strings and
+organ from filtered harmonics, all as the lab's `voices.js` makes them. Claps: two single hand claps
 cut from a CC0 flamenco palmas recording (see
 `rill-sound/public/licenses/samples.txt`). `tools/embed_samples.py` writes
 `src/Samples.h` from both.
