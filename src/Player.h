@@ -115,14 +115,26 @@ class Engine {
  private:
   static constexpr unsigned releaseSamples = rate / 7;
   static constexpr unsigned pianoHold = rate * 9 / 10;
+  // The lab's harpsichord: partials at these multiples of the note, each with
+  // its level and the seconds it takes to die away. Strong upper partials
+  // that fade quickly are what make it read as plucked.
+  static constexpr unsigned partialCount = 7;
+  static constexpr float partials[partialCount][3] = {
+    {1, 1, 1.1f}, {2, 0.75f, 0.7f}, {3, 0.5f, 0.45f}, {4, 0.35f, 0.3f},
+    {5, 0.22f, 0.2f}, {6, 0.14f, 0.14f}, {8, 0.08f, 0.08f}};
+  static constexpr unsigned sineSize = 1024;
   struct Voice {
     const int16_t* data = nullptr;
+    // Synthesized voices sum decaying partials instead of reading a sample.
+    bool synth = false;
+    unsigned partialsUsed = 0;
+    std::array<float, partialCount> amplitude{}, fade{}, phase{}, increment{};
     uint32_t length = 0, delay = 0, hold = 0, releaseLeft = 0;
     double position = 0, step = 1;
     float gain = 0;
     bool on = false;
   };
-  struct Note { double time; int note; uint8_t part; };
+  struct Note { double time; int note; uint8_t part; double length; };
 
   void advance(unsigned count, double target) {
     // A big difference is a start or a jump: take it outright. A small one is
@@ -150,8 +162,8 @@ class Engine {
       anyPlaying = false;
       for (unsigned i = 0; i < partCount_; ++i) {
         const score::Part& part = score::part(*piece_, parts_[i]);
-        anyPlaying |= players_[i].pulse(*piece_, part, scheduled_, [&](double time, int note) {
-          if (pending_ < pendingNotes_.size()) pendingNotes_[pending_++] = {time, note, uint8_t(i)};
+        anyPlaying |= players_[i].pulse(*piece_, part, scheduled_, [&](double time, int note, double length) {
+          if (pending_ < pendingNotes_.size()) pendingNotes_[pending_++] = {time, note, uint8_t(i), length};
         });
       }
       if (!anyPlaying && scheduled_ >= 0 && partCount_) finished_ = true;
@@ -185,7 +197,26 @@ class Engine {
     v->delay = offset;
     const double spread = double(rng() >> 8) / 16777216.0;
     const float share = float(part.level / std::sqrt(double(piece_->partCount)));
-    if (part.voice == score::Voice::Sample) {
+    // A composed note stops at its written length, as a finger lifts from the
+    // key; the process pieces' notes ring out.
+    const uint32_t written = note.length > 0 ? uint32_t(std::max(0.08 * rate, note.length * periodSamples_)) : 0;
+    if (part.voice == score::Voice::Harpsichord) {
+      const double hz = 440.0 * std::pow(2.0, (note.note + part.transpose - 69) / 12.0);
+      v->synth = true;
+      for (unsigned p = 0; p < partialCount; ++p) {
+        const double f = hz * partials[p][0];
+        if (f > rate * 0.4) break;
+        v->amplitude[p] = partials[p][1];
+        // Decays to 5% over the partial's time, as setTargetAtTime does.
+        v->fade[p] = float(std::exp(-3.0 / (partials[p][2] * rate)));
+        v->increment[p] = float(f * sineSize / rate);
+        v->phase[p] = 0;
+        v->partialsUsed = p + 1;
+      }
+      v->length = rate * 3;
+      v->hold = written ? written : rate * 2;
+      v->gain = share * float(0.6 + 0.08 * spread) * 0.22f;
+    } else if (part.voice == score::Voice::Sample) {
       const samples::Clip& clip = samples::oneShots[part.sample];
       v->data = clip.data;
       v->length = clip.length;
@@ -201,20 +232,41 @@ class Engine {
       v->data = zone->data;
       v->length = zone->length;
       v->step = std::pow(2.0, double(midi - int(zone->root)) / 12.0);
-      v->hold = pianoHold;
+      v->hold = written ? std::min(written, pianoHold) : pianoHold;
       v->gain = share * float(0.55 + 0.1 * spread) * 0.8f;
     }
     flash_[note.part] = 1;
     ++started_;
   }
 
+  float synthesize(Voice& v) {
+    float sum = 0;
+    for (unsigned p = 0; p < v.partialsUsed; ++p) {
+      unsigned index = unsigned(v.phase[p]);
+      float frac = v.phase[p] - float(index);
+      sum += v.amplitude[p] * (sine_[index] + (sine_[index + 1] - sine_[index]) * frac);
+      v.amplitude[p] *= v.fade[p];
+      v.phase[p] += v.increment[p];
+      if (v.phase[p] >= float(sineSize)) v.phase[p] -= float(sineSize);
+    }
+    return sum;
+  }
+
   void play(Voice& v, float* mix, unsigned count) {
     for (unsigned i = 0; i < count; ++i) {
       if (v.delay) { --v.delay; continue; }
-      uint32_t index = uint32_t(v.position);
-      if (index + 1 >= v.length) { v.on = false; return; }
-      float frac = float(v.position - index);
-      float sample = (v.data[index] + (v.data[index + 1] - v.data[index]) * frac) / 32768.0f;
+      float sample;
+      if (v.synth) {
+        if (v.position >= v.length) { v.on = false; return; }
+        sample = synthesize(v);
+        v.position += 1;
+      } else {
+        uint32_t index = uint32_t(v.position);
+        if (index + 1 >= v.length) { v.on = false; return; }
+        float frac = float(v.position - index);
+        sample = (v.data[index] + (v.data[index + 1] - v.data[index]) * frac) / 32768.0f;
+        v.position += v.step;
+      }
       float envelope = 1;
       if (v.hold) --v.hold;
       else if (!v.releaseLeft) v.releaseLeft = releaseSamples;
@@ -223,7 +275,6 @@ class Engine {
         if (--v.releaseLeft == 0) { v.on = false; return; }
       }
       mix[i] += sample * v.gain * envelope;
-      v.position += v.step;
     }
   }
 
@@ -260,6 +311,12 @@ class Engine {
   unsigned pending_ = 0;
   std::array<Voice, 40> voices_{};
   std::array<float, 1024> mix_{};
+  // One cycle of a sine, with a guard sample for interpolation.
+  std::array<float, sineSize + 1> sine_ = [] {
+    std::array<float, sineSize + 1> table{};
+    for (unsigned i = 0; i <= sineSize; ++i) table[i] = float(std::sin(2 * 3.14159265358979 * i / sineSize));
+    return table;
+  }();
   std::array<float, maxParts> flash_{};
   float master_ = 3.0f, highpass_ = 0, lastInput_ = 0, envelope_ = 0;
   uint32_t rng_ = 0x9e3779b9, started_ = 0, steals_ = 0, snapsAhead_ = 0, snapsBack_ = 0, late_ = 0;

@@ -98,7 +98,7 @@ inline void menu(M5Canvas& c, unsigned pieceIndex, unsigned devices, int rank, b
   int y = wrapped(c, piece.title, left, 44, width);
   c.setFont(&fonts::Font2);
   c.setTextColor(rgb(0x9aa092));
-  std::snprintf(text, sizeof text, "after %s", piece.composer);
+  std::snprintf(text, sizeof text, "%s", piece.byline);
   y = wrapped(c, text, left, y + 2, width);
 
   // Who plays what, now: parts are dealt by rank among the devices present.
@@ -144,6 +144,55 @@ inline void signedText(char* out, size_t size, double value, bool fraction) {
   }
 }
 
+inline const char* noteName(int midi, char* out, size_t size) {
+  static const char* names[] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
+  std::snprintf(out, size, "%s%d", names[midi % 12], midi / 12 - 1);
+  return out;
+}
+
+// A composed part: the bar, the note sounding now in large type, and the next
+// two bars of the part as a little piano roll, as the lab's Bach pages show.
+inline void composed(M5Canvas& c, const score::Piece& piece, const score::Part& part, const player::View& view,
+                     uint32_t glow, uint16_t back, const char* lead, double pulses) {
+  const score::NoteEvent* notes = &score::noteEvents[part.note];
+  const float at = float(pulses);
+  const int bar = int(std::floor(at / piece.beatsPerBar)) + 1;
+  char status[32], main[12] = "-";
+  if (pulses < 0) {
+    std::snprintf(status, sizeof status, "%sREADY", lead);
+    std::snprintf(main, sizeof main, "%d", int(std::ceil(-pulses * piece.periodMicros / 1e6)));
+  } else if (view.done) {
+    std::snprintf(status, sizeof status, "%sDONE", lead);
+    std::snprintf(main, sizeof main, "OK");
+  } else {
+    std::snprintf(status, sizeof status, "%sBAR %d", lead, bar);
+    // The note sounding now: the latest one started, if it has not ended.
+    for (int64_t i = std::min<int64_t>(view.step, part.noteCount - 1); i >= 0 && i > view.step - 8; --i)
+      if (notes[i].start <= at && at < notes[i].start + notes[i].length) { noteName(notes[i].midi, main, sizeof main); break; }
+  }
+  c.setFont(&fonts::FreeMono9pt7b);
+  c.setTextColor(rgb(glow), back);
+  c.drawString(status, 8, 32);
+  c.setFont(&fonts::FreeSansBold24pt7b);
+  c.setTextColor(rgb(ink), back);
+  centered(c, main, 84);
+
+  int low = 127, high = 0;
+  for (uint32_t i = 0; i < part.noteCount; ++i) { low = std::min<int>(low, notes[i].midi); high = std::max<int>(high, notes[i].midi); }
+  const float window = piece.beatsPerBar * 2.0f, from = std::max(0.0f, at);
+  c.fillRect(8, 199, 119, 1, rgb(dim));
+  for (int64_t i = std::max<int64_t>(0, view.step - 8); i < int64_t(part.noteCount); ++i) {
+    const score::NoteEvent& n = notes[i];
+    if (n.start > from + window) break;
+    if (n.start + n.length < from) continue;
+    const float left = std::max(n.start, from), right = std::min(n.start + n.length, from + window);
+    const int x = 8 + int((left - from) / window * 119), w = std::max(2, int((right - left) / window * 119) - 1);
+    const int y = 195 - (high == low ? 10 : (n.midi - low) * 38 / (high - low));
+    const bool sounding = n.start <= at && at < n.start + n.length;
+    c.fillRect(x, y, w, 3, sounding ? rgb(0xffffff) : rgb(glow));
+  }
+}
+
 // Playing: this device's first part in detail, and a flash for every note it
 // strikes across all its parts.
 inline void playing(M5Canvas& c, const score::Piece& piece, const player::View* views, unsigned count,
@@ -162,6 +211,9 @@ inline void playing(M5Canvas& c, const score::Piece& piece, const player::View* 
   if (!count) return;
   const player::View& view = views[0];
   const score::Part& part = score::part(piece, view.part);
+  if (part.noteCount) {
+    composed(c, piece, part, view, glow, back, leader ? "LEAD " : "", pulses);
+  } else {
   const score::Stage* stage = view.active ? &score::stages[part.stage + view.stage] : nullptr;
   char status[32] = "", main[16] = "";
   const char* lead = leader ? "LEAD " : "";
@@ -212,6 +264,7 @@ inline void playing(M5Canvas& c, const score::Piece& piece, const player::View* 
       bool current = longFigure ? slot == 0 : int64_t(slot) == score::wrap(now, pattern.length);
       c.fillRect(x, 198 - height, w, height, current ? rgb(0xffffff) : rgb(glow));
     }
+  }
   }
   c.setFont(&fonts::Font0);
   c.setTextColor(rgb(0x8a9082), back);

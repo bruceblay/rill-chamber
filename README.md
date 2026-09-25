@@ -1,7 +1,8 @@
 # Rill Chamber
 
 Process music for several StickS3s, one part each: the pieces from the
-[Rill Sound lab](https://rillsound.com/lab), after Steve Reich, on real devices keeping time together over ESP-NOW.
+[Rill Sound lab](https://rillsound.com/lab), after Steve Reich and by
+Johann Sebastian Bach, on real devices keeping time together over ESP-NOW.
 
 Every device runs this same firmware. Switch on two or more near each other and
 they find each other within a second: the lowest id keeps the clock, and every
@@ -19,10 +20,18 @@ each.
 | --- | --- | --- |
 | Piano Phase | 2 | Steve Reich, *Piano Phase* (1967) |
 | Clapping Music | 2 | Steve Reich, *Clapping Music* (1972) |
+| Invention No. 1 | 2 | Johann Sebastian Bach, BWV 772 |
+| Goldberg Variation 3 | 3 | Johann Sebastian Bach, BWV 988 |
+| Canon by Augmentation | 3 | Johann Sebastian Bach, BWV 1079 |
+| Contrapunctus I | 4 | Johann Sebastian Bach, BWV 1080 |
 
-The figures and melodies are original to the lab; the processes are the
-composers'. The scores are not written here: `tools/export_scores.mjs` reads
-them from the lab (`rill-sound/src/lab/phase-scores.js`) into `src/Pieces.h`,
+For the Reich pieces the figures are original to the lab and the processes
+are his. The Bach pieces are Bach's own notes, from the public-domain and
+CC BY-SA editions listed in `rill-sound/reference/bach/SOURCES.md`, played
+on a harpsichord synthesized as the lab's is, each note held for its written
+length. The scores are not written here: `tools/export_scores.mjs` reads
+them from the lab (`rill-sound/src/lab/phase-scores.js` and `bach-scores.js`)
+into `src/Pieces.h`,
 so the browser and the device play the same pieces.
 
 ## Controls

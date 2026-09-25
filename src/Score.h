@@ -72,7 +72,10 @@ inline int64_t wrap(int64_t n, int64_t length) { return ((n % length) + length) 
 inline int64_t jsRound(double x) { return int64_t(std::floor(x + 0.5)); }
 
 // One part being played. `pulse` runs the lab's loop for one pulse and hands
-// every note due within it to `emit(time, midi)`, time in pulses.
+// every note due within it to `emit(time, midi, length)`, time in pulses and
+// length in pulses (zero for the process pieces, whose notes ring freely).
+// A composed part plays its notes list instead, as the lab's Bach engine does:
+// each note that starts within the pulse, at its place in the pulse.
 class PartPlayer {
  public:
   void reset(uint32_t seed) {
@@ -83,6 +86,7 @@ class PartPlayer {
     slip_ = 0;
     step_ = 0;
     rng_ = seed ? seed : 1;
+    noteIndex_ = 0;
     where_ = {nullptr, 0, 0, 0, false};
   }
 
@@ -90,6 +94,18 @@ class PartPlayer {
   template <class Emit>
   bool pulse(const Piece& piece, const Part& part, int64_t local, Emit&& emit) {
     if (local < 0) return true;
+    if (part.noteCount) {
+      while (noteIndex_ < part.noteCount && noteEvents[part.note + noteIndex_].start < float(local + 1)) {
+        const NoteEvent& n = noteEvents[part.note + noteIndex_++];
+        if (n.start < float(local)) continue;  // joined too late for this one
+        step_ = int64_t(noteIndex_ - 1);
+        emit(double(n.start), int(n.midi), double(n.length));
+      }
+      const NoteEvent& last = noteEvents[part.note + part.noteCount - 1];
+      bool playing = noteIndex_ < part.noteCount || double(local) < double(last.start + last.length);
+      where_ = {nullptr, 0, 0, 0, !playing};
+      return playing;
+    }
     const unsigned steps = piece.cycle;
     Where where = stageAt(part, double(local) / steps, steps);
     where_ = where;
@@ -111,7 +127,7 @@ class PartPlayer {
       ++next_;
       if (due < double(local) - 0.25 || note < 0 || !audible(pattern, where, unsigned(step))) continue;
       step_ = stage.once ? position : step;
-      emit(std::max(double(local), due), note);
+      emit(std::max(double(local), due), note, 0.0);
     }
     return true;
   }
@@ -128,6 +144,7 @@ class PartPlayer {
   bool hasNext_ = false;
   int64_t next_ = 0, stageNote_ = 0, step_ = 0;
   unsigned stageIndex_ = ~0u;
+  uint32_t noteIndex_ = 0;
   int slip_ = 0;
   uint32_t rng_ = 1;
   Where where_{nullptr, 0, 0, 0, false};

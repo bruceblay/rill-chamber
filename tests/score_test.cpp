@@ -25,7 +25,7 @@ int main() {
       std::vector<Out> out;
       score::PartPlayer player;
       player.reset(1);
-      for (int64_t local = 0; player.pulse(piece, score::part(piece, i), local, [&](double time, int note) { out.push_back({time, note}); }); ++local) {}
+      for (int64_t local = 0; player.pulse(piece, score::part(piece, i), local, [&](double time, int note, double) { out.push_back({time, note}); }); ++local) {}
       const Span& span = spans[partIndex];
       check(out.size() == span.count, "note count", partIndex, unsigned(out.size()));
       for (unsigned n = 0; n < std::min<size_t>(out.size(), span.count); ++n) {

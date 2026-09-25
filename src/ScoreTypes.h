@@ -8,7 +8,7 @@
 namespace score {
 
 enum class Mode : uint8_t { Play, Rest, Build, Reduce };
-enum class Voice : uint8_t { Piano, Sample };
+enum class Voice : uint8_t { Piano, Sample, Harpsichord };
 
 // A figure: `length` steps starting at notes[notes], MIDI numbers or -1 for a
 // rest, and the order its notes are added in during a build.
@@ -36,6 +36,13 @@ struct Stage {
   const char* word;
 };
 
+// A note of a composed piece, in beats from the start: Bach's voices are lists
+// of these rather than figures on a step grid.
+struct NoteEvent {
+  float start, length;
+  uint8_t midi;
+};
+
 // One device's part. `sample` indexes the embedded one-shots for Voice::Sample;
 // `rate` plays that sample slower or faster. `main` is what the screen shows in
 // place of the offset.
@@ -48,6 +55,9 @@ struct Part {
   double rate;
   const char* main;
   uint16_t stage, stageCount;
+  // A composed part: noteCount notes from noteEvents[note]. Zero for the
+  // process pieces, which play from their stages instead.
+  uint32_t note, noteCount;
 };
 
 struct Section {
@@ -60,6 +70,8 @@ struct Section {
 struct Piece {
   const char* title;
   const char* composer;
+  const char* byline;  // "after Steve Reich", or the composer and catalogue number
+  uint8_t beatsPerBar; // for showing bars in composed pieces
   uint32_t periodMicros;
   uint16_t cycle;
   int8_t featured;
