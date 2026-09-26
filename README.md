@@ -1,5 +1,7 @@
 # Rill Chamber
 
+**rill** /rɪl/ *noun*: a small stream or a tiny, shallow channel cut into soil by running water.
+
 Process music for several StickS3s, one part each: the pieces from the
 [Rill Sound lab](https://rillsound.com/lab) for up to four devices, after
 Reich, Glass and Rzewski and by Johann Sebastian Bach, on real devices keeping
@@ -78,6 +80,8 @@ JavaScript engine produces (`tests/score_vectors.h`, written by the exporter),
 so the two cannot drift apart unnoticed. `tools/render.cpp` renders a piece
 through the device's own audio engine to a WAV file.
 
-## Licence
+## Credits and license
+
+Created by Bruce Blay.
 
 GPL-3.0-or-later, as the rest of the Rill family.
