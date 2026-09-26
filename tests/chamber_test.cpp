@@ -112,7 +112,7 @@ int main() {
       if (t % 250000 == 0) follow.receive(lead.outgoing(t), t);
       if (t % 250000 == 125000) lead.receive(follow.outgoing(t), t);
       int64_t shared = follow.sharedMicros(t);
-      if (t > 3000000) worstJump = std::max(worstJump, std::llabs(shared - previous - 1000));
+      if (t > 3000000) worstJump = std::max<int64_t>(worstJump, std::llabs(shared - previous - 1000));
       previous = shared;
     }
     CHECK(restarted && lead.conducting() && !follow.conducting());
