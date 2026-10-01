@@ -4,8 +4,9 @@
 """Make the vector release cover from the lab's Contrapunctus I note data.
 
 Run with a sibling rill-sound checkout. Rasterize cover.svg to 1200x630 PNG
-using an SVG renderer such as Sharp. This is score artwork, not a screen capture.
+using an SVG renderer such as Sharp. The score artwork is combined with the shared 3D device render.
 """
+import base64
 import json
 from pathlib import Path
 from html import escape
@@ -38,8 +39,13 @@ for i, voice in enumerate(score['voices'][:4]):
             y = top + 65 - (n - low) / max(1, high - low) * 48
             width = max(3, min(d, 32 - t) * 16 - 2)
             svg.append(f'<rect x="{x:.2f}" y="{y:.2f}" width="{width:.2f}" height="6" rx="2" fill="{colors[i]}"/>')
-svg.append('''</g>
-<rect y="552" width="1200" height="78" fill="#f3f0e7"/>
+svg.append('</g>')
+mock = root / 'release/device-transparent.png'
+if mock.exists():
+    encoded = base64.b64encode(mock.read_bytes()).decode()
+    svg.append('<defs><filter id="device-shadow" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#000000" flood-opacity=".45"/></filter></defs>')
+    svg.append(f'<image x="672" y="0" width="460" height="575" href="data:image/png;base64,{encoded}" filter="url(#device-shadow)"/>')
+svg.append('''<rect y="552" width="1200" height="78" fill="#f3f0e7"/>
 <path d="M54 552.5H1146" stroke="#202b29" stroke-opacity=".22"/>
 <g font-family="Helvetica,Arial,sans-serif" font-size="19" fill="#202b29">
 <text x="54" y="600">rillsound.com</text>

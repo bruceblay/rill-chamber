@@ -28,5 +28,5 @@ The page provides two PNG images at 1600 × 2000:
 - `#export`: cream background, saved here as `release/device.png`.
 - `#transparent`: transparent background, saved here as `release/device-transparent.png`.
 
-These supplement `release/cover.png`. The existing score-art cover and
-versioned firmware package are unchanged.
+The transparent image is also composed into `release/cover.png` by
+`tools/make_cover.py`. The versioned firmware package is unchanged.

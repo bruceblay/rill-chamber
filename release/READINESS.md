@@ -17,8 +17,8 @@ Prepared on 2026-10-01. **Local release candidate; not submitted to M5Burner.**
   2,466,705 bytes of the 7 MiB application partition and 73,968 bytes of static RAM.
 
 The cover uses the Rill Sound social cards' palette and circular composition,
-with note data from Bach's Contrapunctus I. It is score artwork, not a device
-screenshot. Chamber does not yet have a dedicated web-app meta image; this
+with note data from Bach's Contrapunctus I behind the shared 3D StickS3 model.
+The device display is rendered from Chamber's playing-screen code. Chamber does not yet have a dedicated web-app meta image; this
 cover is a local candidate for that shared asset.
 
 ## Not performed in this preparation
