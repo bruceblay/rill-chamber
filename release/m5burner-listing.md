@@ -12,6 +12,7 @@ Status: **prepared locally, not submitted** (2026-10-01).
 | Source | https://github.com/bruceblay/rill-chamber |
 | Browser lab | https://rillsound.com/lab |
 | Cover | `release/cover.png` — 1200 × 630 |
+| Additional device image | `release/device.png` — 1600 × 2000 |
 | Firmware | `dist/rill-chamber-0.1.0/rill-chamber-0.1.0-factory.bin` |
 | Flash address | `0x0` |
 | Flash size | 8 MB |
