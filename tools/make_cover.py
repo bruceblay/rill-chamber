@@ -19,8 +19,9 @@ svg = ['''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" view
 <g font-family="Helvetica,Arial,sans-serif" fill="#202b29">
 <text x="54" y="65" font-size="24" font-weight="600" letter-spacing="-.6">Rill Sound</text>
 <text x="48" y="230" font-size="100" letter-spacing="-5">Chamber</text>
-<text x="54" y="438" font-size="23">Small devices.</text>
-<text x="54" y="471" font-size="23">A whole ensemble.</text></g>
+<text x="54" y="405" font-size="23">A player for 50 compositions.</text>
+<text x="54" y="438" font-size="23">Bach and process music.</text>
+<text x="54" y="471" font-size="23">For one to four StickS3s.</text></g>
 <g clip-path="url(#disc)"><rect x="630" width="600" height="570" fill="#0b0e0c"/>
 ''']
 colors = ['#b8d98a', '#e4c77a', '#91bac1', '#cc9387']
