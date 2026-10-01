@@ -11,7 +11,10 @@ Prepared on 2026-10-01. **Local release candidate; not submitted to M5Burner.**
 - Built for StickS3 with the pinned PlatformIO and library versions.
 - Added a version, changelog, self-contained build instructions and asset attribution.
 - Prepared the store description and 1200 × 630 cover.
-- Added the factory-image packager with source commit, segment bounds and hashes.
+- Packaged the 8 MB factory image from committed source `3187fe0`; blank NVS,
+  segment bounds, merged bytes and unused flash checks passed.
+- Recorded artifact hashes in [the manifest](0.1.0-manifest.json). The build used
+  2,466,705 bytes of the 7 MiB application partition and 73,968 bytes of static RAM.
 
 The cover uses the Rill Sound social cards' palette and circular composition,
 with note data from Bach's Contrapunctus I. It is score artwork, not a device

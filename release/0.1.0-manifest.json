@@ -1,0 +1,47 @@
+{
+  "name": "rill-chamber",
+  "version": "0.1.0",
+  "status": "prepared-not-submitted",
+  "device": "M5Stack StickS3",
+  "source_commit": "3187fe0f1c9e36fb42dab7137517ad26c4c8b9be",
+  "factory_offset": "0x0",
+  "factory_size": 8388608,
+  "factory_sha256": "ffa4b48e282fddc34b29c85a58443c9efbbc099f450511d0929df7d5a7bd8f06",
+  "blank_nvs_verified": true,
+  "unused_flash_blank_verified": true,
+  "app_partition_size": 7340032,
+  "platformio": "PlatformIO Core, version 6.2.0",
+  "dependencies": {
+    "espressif32": "6.12.0",
+    "arduino-esp32": "2.0.17",
+    "M5Unified": "0.2.21",
+    "M5GFX": "0.2.28"
+  },
+  "segments": [
+    {
+      "offset": "0x0",
+      "file": "bootloader.bin",
+      "size": 15104,
+      "sha256": "1776e4dd896a69d0a5c2e79957b0e2a88aa4129b1381d6478683515a1f6af343"
+    },
+    {
+      "offset": "0x8000",
+      "file": "partitions.bin",
+      "size": 3072,
+      "sha256": "398aae039a5809646ee229b34320f9e1b8d1a3bd46757410c4abf6cb304481a7"
+    },
+    {
+      "offset": "0xe000",
+      "file": "boot_app0.bin",
+      "size": 8192,
+      "sha256": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0"
+    },
+    {
+      "offset": "0x10000",
+      "file": "firmware.bin",
+      "size": 2467072,
+      "sha256": "4ff5d792f5eed8c53b20404a87c45ee025ba1377426a8e939c25018974a62c23"
+    }
+  ],
+  "hardware_acceptance": "not performed during release preparation"
+}
