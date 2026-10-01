@@ -31,6 +31,13 @@ struct View {
   float flash = 0;
 };
 
+struct Diagnostics {
+  uint32_t started = 0, steals = 0, ahead = 0, back = 0, late = 0;
+  unsigned peakVoices = 0;
+  double worstError = 0;
+  float level = 0;
+};
+
 class Engine {
  public:
   // Which piece, and which of its parts this device plays.
@@ -105,10 +112,16 @@ class Engine {
     return int16_t((x - x * x * x * (4.0f / 27.0f)) * 32767.0f);
   }
 
-  // The display's copy. Never blocks the audio task: if the display is reading,
-  // this block simply skips updating it.
-  unsigned views(View* out) {
+  // Copies for the loop task. The audio task skips a snapshot when this lock
+  // is held, so drawing or logging cannot block audio rendering.
+  Diagnostics diagnostics() {
     std::lock_guard<std::mutex> hold(viewLock_);
+    return diagnostics_;
+  }
+
+  unsigned views(View* out, unsigned expectedPiece) {
+    std::lock_guard<std::mutex> hold(viewLock_);
+    if (viewPiece_ != &score::piece(expectedPiece)) return 0;
     std::copy(views_.begin(), views_.begin() + viewCount_, out);
     return viewCount_;
   }
@@ -337,7 +350,9 @@ class Engine {
   void snapshot() {
     std::unique_lock<std::mutex> hold(viewLock_, std::try_to_lock);
     if (!hold.owns_lock()) return;
-    viewCount_ = partCount_;
+    diagnostics_ = {started_, steals_, snapsAhead_, snapsBack_, late_, peakVoices_, worstError_, level_};
+    viewPiece_ = piece_;
+    viewCount_ = piece_ ? partCount_ : 0;
     for (unsigned i = 0; i < partCount_; ++i) {
       const score::Where& where = players_[i].where();
       View& view = views_[i];
@@ -381,7 +396,9 @@ class Engine {
   unsigned peakVoices_ = 0;
   std::mutex viewLock_;
   std::array<View, maxParts> views_{};
+  Diagnostics diagnostics_{};
   unsigned viewCount_ = 0;
+  const score::Piece* viewPiece_ = nullptr;
 };
 
 }  // namespace player

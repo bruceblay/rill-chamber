@@ -2,13 +2,14 @@
 
 **rill** /rɪl/ *noun*: a small stream or a tiny, shallow channel cut into soil by running water.
 
-Process music for several StickS3s, one part each: the pieces from the
-[Rill Sound lab](https://rillsound.com/lab) for up to four devices, after
-Reich, Glass and Rzewski and by Johann Sebastian Bach, on real devices keeping
-time together over ESP-NOW.
+**Version 0.1.0 — prepared for M5Burner; not yet submitted.**
+
+Process studies after Reich, Glass and Rzewski, and music by Johann Sebastian
+Bach, from the [Rill Sound lab](https://rillsound.com/lab). One to four M5Stack
+StickS3s share the parts and keep time together over ESP-NOW.
 
 Every device runs this same firmware. Switch on two or more near each other and
-they find each other within a second: the lowest id keeps the clock, and every
+allow a couple of seconds for discovery: the lowest id keeps the clock, and every
 device knows who else is present. A press on any device starts or stops the
 piece for all of them.
 
@@ -19,7 +20,7 @@ parts, each takes several.
 
 ## Pieces
 
-Browsed a collection at a time.
+50 pieces, browsed a collection at a time.
 
 | Collection | Pieces | Voices |
 | --- | --- | --- |
@@ -33,7 +34,7 @@ Browsed a collection at a time.
 
 For the process pieces the figures are original to the lab and the processes
 are the composers'. The Bach pieces are Bach's own notes, from the public-domain and
-CC BY-SA editions listed in `rill-sound/reference/bach/SOURCES.md`, played
+CC BY-SA editions listed in [score and sample credits](docs/SOURCES.md), played
 on a harpsichord synthesized as the lab's is, each note held for its written
 length. The scores are not written here: `tools/export_scores.mjs` reads
 them from the lab (`rill-sound/src/lab/phase-scores.js` and `public/bach`)
@@ -41,14 +42,38 @@ into `src/Pieces.h`, so the browser and the device play the same pieces.
 
 ## Controls
 
-- Front button: play or stop, for every device.
-- Side button: next piece in the collection while stopped; hold it for the
-  next collection. Volume while playing.
+| Button | While stopped | While playing |
+| --- | --- | --- |
+| Front | Start the whole ensemble, after a 2.5-second lead-in | Stop the whole ensemble |
+| Side, tap | Next piece in this collection, for everyone | Local volume: 100% → 67% → 43% → 100% |
+| Side, hold (0.6 seconds) | Next collection, for everyone | No action |
+
+The device starts stopped, on Piano Phase. Piece and volume are not saved
+across reboots. A low battery automatically caps volume; the screen indicates
+the cap. There are no shake or tilt controls.
+
+At the end of a piece the screen shows DONE. Press Front to stop; press it
+again to replay. Stop before browsing to another piece.
+
+## Playing together
+
+Install the same Chamber version on each device. Switch on all players near
+each other, wait a couple of seconds, choose a piece and press Front on any
+player. Parts are assigned when playback starts, by device ID rather than
+physical position. More players than parts means some devices listen only.
+The six-part Ricercar shares its six parts among at most four devices.
+
+Membership stays fixed during a performance. To include a device that joined
+late, stop and start again. If a player leaves, its parts remain silent until
+the next start redistributes them.
+
+Chamber communicates directly over ESP-NOW on Wi-Fi channel 1. No router or
+internet is required. It uses a separate protocol from the five Rill Sound
+instruments, so those instruments do not join a Chamber performance.
 
 ## How it keeps time
 
-The clock is Rill Sync's (`src/Ensemble.h`), measured on two devices at about
-a third of a millisecond apart, with its own packet magic so a chamber ensemble
+The clock comes from Rill Sync (`src/Ensemble.h`), with its own packet magic so a chamber ensemble
 never mixes with a Mallet or Drums one. It gives every device the same timeline.
 A start is a proposal to begin pulse 0 of the score two and a half seconds out
 on that timeline, and every device carries the whole score, so each works out
@@ -64,24 +89,29 @@ Piano: Rill Mallet's multisamples (VCSL, CC0). Harpsichord, marimba,
 xylophone and glass are synthesized from decaying partials, and strings and
 organ from filtered harmonics, all as the lab's `voices.js` makes them. Claps: two single hand claps
 cut from a CC0 flamenco palmas recording (see
-`rill-sound/public/licenses/samples.txt`). `tools/embed_samples.py` writes
+[credits](docs/SOURCES.md)). `tools/embed_samples.py` writes
 `src/Samples.h` from both.
 
 ## Build and install
 
+The M5Burner listing is being prepared under **rill-chamber**. It has not
+been submitted in this release preparation. Use [the source build](docs/BUILD.md)
+or the prepared factory image until it is available.
+
 ```sh
-python tools/test.py                           # host tests
-python -m platformio run                        # build
-python tools/flash.py --port /dev/cu.usbmodem…  # install
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m platformio run
+.venv/bin/python tools/flash.py --port /dev/cu.usbmodemYOUR_DEVICE
 ```
 
-`python tools/test.py` checks the C++ engine against every note time the lab's
-JavaScript engine produces (`tests/score_vectors.h`, written by the exporter),
-so the two cannot drift apart unnoticed. `tools/render.cpp` renders a piece
-through the device's own audio engine to a WAV file.
+See [build and packaging instructions](docs/BUILD.md), the
+[store listing draft](release/m5burner-listing.md), and
+[release readiness](release/READINESS.md).
 
 ## Credits and license
 
 Created by Bruce Blay.
 
-GPL-3.0-or-later, as the rest of the Rill family.
+Firmware code: [GPL-3.0-or-later](LICENSE). Score editions and recordings
+retain their own licenses; see [sources and attribution](docs/SOURCES.md).

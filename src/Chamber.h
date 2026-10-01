@@ -38,6 +38,25 @@ struct Packet {
 } __attribute__((packed));
 static_assert(sizeof(Packet) <= 250, "ESP-NOW payload");
 
+// Epoch zero is the empty discovery state sent before anyone touches a button.
+inline bool validControl(const Control& c) {
+  if (c.running > 1 || c.count > maxMembers) return false;
+  if (!c.epoch) return !c.from && !c.running && !c.count;
+  if (!c.from || !c.count) return false;
+  for (unsigned i = 0; i < c.count; ++i)
+    if (!c.members[i] || (i && c.members[i - 1] >= c.members[i])) return false;
+  return true;
+}
+
+// Validate the whole envelope before any part can affect the roster or clock.
+inline bool validPacket(const Packet& p, unsigned pieceCount) {
+  const auto& c = p.clock;
+  return c.magic == ensemble::magic && c.version == ensemble::version &&
+         c.role <= 1 && c.tempo >= 20 && c.tempo <= 240 &&
+         c.beatPeriod == 60000000u / c.tempo && c.bars > 0 &&
+         p.sender != 0 && validControl(p.control) && p.control.piece < pieceCount;
+}
+
 inline bool newer(const Control& a, const Control& b) {
   if (a.epoch != b.epoch) return a.epoch > b.epoch;
   return a.epoch != 0 && a.from < b.from;
@@ -93,7 +112,7 @@ class Session {
 
   // Returns true if the ensemble's state changed.
   bool receive(const Control& incoming) {
-    if (!newer(incoming, control_)) return false;
+    if (!validControl(incoming) || !newer(incoming, control_)) return false;
     control_ = incoming;
     return true;
   }

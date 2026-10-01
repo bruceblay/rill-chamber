@@ -82,6 +82,7 @@ void onReceive(const uint8_t*, const uint8_t* data, int length) {
   if (head - inboxTail.load(std::memory_order_acquire) >= inboxSize) { ++dropped; return; }
   Received& slot = inbox[head % inboxSize];
   std::memcpy(&slot.packet, data, sizeof(chamber::Packet));
+  if (!chamber::validPacket(slot.packet, score::pieceCount)) return;
   slot.at = at;
   inboxHead.store(head + 1, std::memory_order_release);
 }
@@ -130,19 +131,19 @@ void audioTask(void*) {
   bool sounding = false;
   for (;;) {
     uint32_t generation = planGeneration.load();
-    if (generation != seen) {
+    const bool changed = generation != seen;
+    if (changed) {
       seen = generation;
       portENTER_CRITICAL(&timingLock);
       current = plan;
       portEXIT_CRITICAL(&timingLock);
-      sounding = false;
     }
     // A start more than ten seconds away cannot be one a device proposed (they
     // start two and a half seconds out): it belongs to a timeline that has
     // since moved, so treat the piece as stopped rather than wait in silence.
     const bool stale = current.running && current.start - sharedNow(esp_timer_get_time()) > 10000000;
     const bool wanted = current.running && !stale;
-    if (wanted != sounding) {
+    if (changed || wanted != sounding) {
       if (wanted) engine.configure(current.piece, current.rank, current.members, current.seed);
       else engine.silence();
       sounding = wanted;
@@ -266,7 +267,7 @@ void setup() {
   applyVolume();
   applyControl();
   xTaskCreatePinnedToCore(audioTask, "chamber-audio", 12288, nullptr, 3, nullptr, 1);
-  logf("rill-chamber id=%08lx radio=%s pieces=%u reset=%s\n", (unsigned long)self, radio ? "up" : "FAILED",
+  logf("rill-chamber " RILL_VERSION " id=%08lx radio=%s pieces=%u reset=%s\n", (unsigned long)self, radio ? "up" : "FAILED",
                 score::pieceCount, resetName());
 }
 
@@ -346,7 +347,7 @@ void loop() {
     lastDraw = now;
     if (control.running) {
       player::View views[player::maxParts];
-      unsigned count = engine.views(views);
+      unsigned count = engine.views(views, control.piece);
       const score::Piece& piece = score::piece(control.piece);
       double pulses = double(sharedNow(now) - control.start) / double(piece.periodMicros);
       const uint8_t heard = std::min(volume, volumeCap);
@@ -367,6 +368,7 @@ void loop() {
   if (now - lastReport > 5000000) {
     lastReport = now;
     uint32_t ids[chamber::maxMembers];
+    const auto audio = engine.diagnostics();
     logf("%s devices=%u piece=%u running=%u rank=%d jitter=%lldus render=%luus queue=%lu dropped=%lu "
                   "notes=%lu steals=%lu ahead=%lu back=%lu worst=%.2f late=%lu voices=%u gap=%luus "
                   "joins=%lu takeovers=%lu heard=%lu missed=%lu level=%.3f heap=%u reset=%s up=%llds loop=%luus "
@@ -374,11 +376,11 @@ void loop() {
                   clock_.conducting() ? "lead" : "follow", members(now, ids), control.piece, control.running,
                   session.rank(), (long long)clock_.offsetJitter(), (unsigned long)worstRenderUs.load(),
                   (unsigned long)queueErrors.load(), (unsigned long)dropped.load(),
-                  (unsigned long)engine.notesStarted(), (unsigned long)engine.steals(), (unsigned long)engine.snapsAhead(),
-                  (unsigned long)engine.snapsBack(), engine.worstError(), (unsigned long)engine.lateNotes(),
-                  engine.peakVoices(), (unsigned long)worstGapUs.load(), (unsigned long)clock_.joins(),
+                  (unsigned long)audio.started, (unsigned long)audio.steals, (unsigned long)audio.ahead,
+                  (unsigned long)audio.back, audio.worstError, (unsigned long)audio.late,
+                  audio.peakVoices, (unsigned long)worstGapUs.load(), (unsigned long)clock_.joins(),
                   (unsigned long)clock_.takeovers(), (unsigned long)clock_.received(), (unsigned long)clock_.missed(),
-                  engine.level(), ESP.getFreeHeap(), resetName(), (long long)(now / 1000000), (unsigned long)worstLoopUs,
+                  audio.level, ESP.getFreeHeap(), resetName(), (long long)(now / 1000000), (unsigned long)worstLoopUs,
                   int(M5.Power.getBatteryVoltage()), M5.Power.isCharging() == m5::Power_Class::is_charging ? "+" : "",
                   unsigned(std::min(volume, volumeCap)), slowestPart, (unsigned long)slowestPartUs,
                   (unsigned long)paced.load(), int(M5.Speaker.isEnabled()));
